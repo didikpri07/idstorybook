@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "@/App.css";
 import "@/Language.css";
 import { BrowserRouter, Routes, Route, Link, useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, CircleHelp, CloudUpload, Crown, Heart, Languages, LayoutDashboard, Package, Sparkles, WandSparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, CircleHelp, CloudUpload, Crown, Heart, Languages, LayoutDashboard, Package, Pause, Play, Sparkles, Volume2, VolumeX, WandSparkles } from "lucide-react";
 import { copy, languages, useLanguage } from "@/i18n";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -35,7 +35,89 @@ function Create() {
   return <Shell><main className="create-layout"><div className="create-intro"><div className="eyebrow"><WandSparkles size={15} /> {text.createEyebrow}</div><h1>{text.createTitleA}<br /><em>{text.createTitleB}</em></h1><p>{text.createDescription}</p><div className="steps"><span className="active">01</span><i /><span>02</span><i /><span>03</span></div></div><form className="form-panel" onSubmit={submit}>{error && <div className="error-message" role="alert" data-testid="create-error-message">{error}</div>}<label>{text.name}<input name="child_name" value={form.child_name} onChange={update} placeholder={language === "id" ? "contoh: Maya" : "e.g. Maya"} required data-testid="child-name-input" /></label><div className="two-col"><label>{text.age}<select name="age" value={form.age} onChange={update} data-testid="child-age-select">{[3, 4, 5, 6, 7, 8, 9, 10].map(age => <option key={age}>{age}</option>)}</select></label><label>{text.personality}<select name="gender" value={form.gender} onChange={update} required data-testid="child-gender-select"><option value="">{text.choose}</option><option>{language === "id" ? "Pemberani" : "Adventurous"}</option><option>{language === "id" ? "Penasaran" : "Curious"}</option><option>{language === "id" ? "Imajinatif" : "Imaginative"}</option></select></label></div><label>{text.world}<select name="theme" value={form.theme} onChange={update} data-testid="story-theme-select">{themes.map(theme => <option key={theme.name} value={theme.name}>{language === "id" ? theme.id : theme.name}</option>)}</select></label><label className="upload">{text.photo}<div className="upload-box"><CloudUpload size={24} /><span><b>{photoName || text.dropPhoto}</b> {!photoName && text.browse}</span><small>{text.photoHint}</small></div><input type="file" accept="image/*" data-testid="child-photo-input" onChange={onPhoto} /></label><div className="story-language-field"><label>{text.storybook}<select name="story_language" value={form.story_language} onChange={update} data-testid="storybook-language-select">{storyLanguages.map(item => <option value={item.code} key={item.code}>{item.flag} {item.label}</option>)}</select></label><small>{language === "id" ? "Bahasa ini akan digunakan untuk teks buku cerita." : "This language will be used for the story text."}</small></div><button className="btn btn-primary full" disabled={loading} data-testid="generate-story-button">{loading ? <><span className="spinner" /> {text.weaving}</> : <>{text.magic} <WandSparkles size={17} /></>}</button><small className="safe-note">🔒 {text.privacy}</small></form></main></Shell>;
 }
 
-function Storybook() { const { text } = useLanguage(); const { id } = useParams(); const [story, setStory] = useState(null); const [error, setError] = useState(""); const [page, setPage] = useState(0); useEffect(() => { axios.get(`${API}/stories/${id}`).then(response => setStory(response.data)).catch(() => setError(text.storyError)); }, [id, text.storyError]); if (error) return <Shell><div className="center-page"><div className="error-message" role="alert" data-testid="storybook-error-message">{error}</div></div></Shell>; if (!story) return <Shell><div className="center-page"><span className="spinner" /><p>{text.storyLoading}</p></div></Shell>; const current = story.pages[page]; return <Shell><main className="reader"><div className="reader-head"><Link to="/dashboard" className="back-link" data-testid="back-library-link"><ChevronLeft size={17} /> {text.backLibrary}</Link><span className="reader-title"><BookOpen size={16} /> {story.title}</span><Link to={`/checkout?story_id=${story.id}&child_name=${encodeURIComponent(story.child_name)}`} className="btn btn-coral" data-testid="order-physical-book-button">{text.orderPhysical} <Box size={16} /></Link></div><div className="book"><div className="book-image"><img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration" /><span className="page-number">{page + 1} / {story.pages.length}</span></div><div className="book-text"><span className="page-kicker">{text.chapter} {page + 1}</span><p data-testid="storybook-page-text">{current.text}</p><div className="reader-controls"><button aria-label={text.previous} onClick={() => setPage(Math.max(0, page - 1))} disabled={!page} data-testid="previous-page-button"><ChevronLeft /></button><div className="dots">{story.pages.map((_, index) => <span className={index === page ? "selected" : ""} key={index} />)}</div><button aria-label={text.next} onClick={() => setPage(Math.min(story.pages.length - 1, page + 1))} disabled={page === story.pages.length - 1} data-testid="next-page-button"><ChevronRight /></button></div></div></div></main></Shell>; }
+function Storybook() {
+  const { text } = useLanguage();
+  const { id } = useParams();
+  const [story, setStory] = useState(null);
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(0);
+  const [unlocked, setUnlocked] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    axios.get(`${API}/stories/${id}`).then(response => setStory(response.data)).catch(() => setError(text.storyError));
+  }, [id, text.storyError]);
+
+  // When the page changes and narration is unlocked, auto-play the new page audio.
+  useEffect(() => {
+    if (!unlocked || !story) return;
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = 0;
+    el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+  }, [page, unlocked, story]);
+
+  if (error) return <Shell><div className="center-page"><div className="error-message" role="alert" data-testid="storybook-error-message">{error}</div></div></Shell>;
+  if (!story) return <Shell><div className="center-page"><span className="spinner" /><p>{text.storyLoading}</p></div></Shell>;
+
+  const current = story.pages[page];
+  const isLast = page === story.pages.length - 1;
+  const audioSrc = current.audio ? resolveImage(current.audio) : null;
+
+  const startReading = async () => {
+    setUnlocked(true);
+    const el = audioRef.current;
+    if (el) { try { await el.play(); setPlaying(true); } catch { setPlaying(false); } }
+  };
+  const togglePlay = async () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) { try { await el.play(); setPlaying(true); } catch { setPlaying(false); } }
+    else { el.pause(); setPlaying(false); }
+  };
+  const toggleMute = () => { setMuted(previous => { const next = !previous; if (audioRef.current) audioRef.current.muted = next; return next; }); };
+  const onEnded = () => { setPlaying(false); if (!isLast) setPage(page + 1); };
+  const goPage = next => { setPage(next); };
+
+  return <Shell><main className="reader">
+    <div className="reader-head">
+      <Link to="/dashboard" className="back-link" data-testid="back-library-link"><ChevronLeft size={17} /> {text.backLibrary}</Link>
+      <span className="reader-title"><BookOpen size={16} /> {story.title}</span>
+      <Link to={`/checkout?story_id=${story.id}&child_name=${encodeURIComponent(story.child_name)}`} className="btn btn-coral" data-testid="order-physical-book-button">{text.orderPhysical} <Box size={16} /></Link>
+    </div>
+    <div className="book">
+      <div className="book-image">
+        <img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration" />
+        <span className="page-number">{page + 1} / {story.pages.length}</span>
+      </div>
+      <div className="book-text">
+        <span className="page-kicker">{text.chapter} {page + 1}</span>
+        <p data-testid="storybook-page-text">{current.text}</p>
+        {audioSrc ? <audio ref={audioRef} src={audioSrc} preload="auto" onEnded={onEnded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} data-testid="narrator-audio" /> : null}
+        <div className="narrator-controls" data-testid="narrator-controls">
+          {!unlocked && audioSrc ? (
+            <button type="button" className="btn btn-primary btn-sm narrator-start" onClick={startReading} data-testid="start-read-aloud-button"><Play size={16} /> {text.readAloud}</button>
+          ) : null}
+          {unlocked && audioSrc ? (
+            <>
+              <button type="button" className="icon-btn" onClick={togglePlay} aria-label={playing ? text.stopReading : text.readAloud} data-testid="toggle-play-button">{playing ? <Pause size={18} /> : <Play size={18} />}</button>
+              <button type="button" className="icon-btn" onClick={toggleMute} aria-label={muted ? text.unmuteNarrator : text.muteNarrator} data-testid="toggle-mute-button">{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+              <small className="narrator-hint" data-testid="narrator-hint">{playing ? "◆ " + text.readAloud : text.readAloud}</small>
+            </>
+          ) : null}
+          {!audioSrc ? <small className="narrator-hint" data-testid="narrator-missing">{text.narrationUnavailable}</small> : null}
+        </div>
+        <div className="reader-controls">
+          <button aria-label={text.previous} onClick={() => goPage(Math.max(0, page - 1))} disabled={!page} data-testid="previous-page-button"><ChevronLeft /></button>
+          <div className="dots">{story.pages.map((_, index) => <span className={index === page ? "selected" : ""} key={index} />)}</div>
+          <button aria-label={text.next} onClick={() => goPage(Math.min(story.pages.length - 1, page + 1))} disabled={isLast} data-testid="next-page-button"><ChevronRight /></button>
+        </div>
+      </div>
+    </div>
+  </main></Shell>;
+}
 
 function Checkout() { const { text } = useLanguage(); const [params] = useSearchParams(); const [done, setDone] = useState(false); const [error, setError] = useState(""); const [format, setFormat] = useState("Hardcover"); const [form, setForm] = useState({ customer_name: "", email: "", address: "", city: "", postal_code: "", payment_method: "Stripe" }); const update = event => setForm({ ...form, [event.target.name]: event.target.value }); const submit = async event => { event.preventDefault(); setError(""); try { await axios.post(`${API}/orders`, { ...form, story_id: params.get("story_id") || "demo", child_name: params.get("child_name") || "Story friend", format, gift_box: false }); setDone(true); } catch (_) { setError(text.orderError); } }; if (done) return <Shell><div className="center-page"><div className="success-icon"><Check /></div><div className="eyebrow">{text.confirmed}</div><h1>{text.onWayA}<br /><em>{text.onWayB}</em></h1><p className="center-sub">{text.confirmedDescription}</p><Link to="/dashboard" className="btn btn-primary" data-testid="track-order-button">{text.track} <ArrowRight size={17} /></Link></div></Shell>; return <Shell><main className="checkout"><div className="checkout-title"><Link to="/dashboard" className="back-link" data-testid="back-storybook-link"><ChevronLeft size={17} /> {text.checkoutBack}</Link><h1>{text.checkoutTitleA} <em>{text.checkoutTitleB}</em></h1><p>{text.checkoutDescription}</p></div><form className="checkout-form" onSubmit={submit}>{error && <div className="error-message" role="alert" data-testid="checkout-error-message">{error}</div>}<div className="format-row"><h3>{text.cover}</h3><div className="format-options">{[["Hardcover", "$34.00", "★★★★★"], ["Softcover", "$22.00", "★★★★☆"]].map(([name, price, stars]) => <button type="button" onClick={() => setFormat(name)} className={`format-option ${format === name ? "chosen" : ""}`} key={name} data-testid={`format-${name.toLowerCase()}-option`}><span className="cover-icon">▣</span><b>{name === "Hardcover" ? text.hardcover : text.softcover}</b><small>{stars} · {price}</small>{format === name && <Check size={16} />}</button>)}</div></div><div className="field-section"><h3>{text.send}</h3><div className="two-col"><input name="customer_name" placeholder={text.fullName} required onChange={update} data-testid="shipping-name-input" /><input name="email" type="email" placeholder={text.email} required onChange={update} data-testid="shipping-email-input" /></div><input name="address" placeholder={text.address} required onChange={update} data-testid="shipping-address-input" /><div className="two-col"><input name="city" placeholder={text.city} required onChange={update} data-testid="shipping-city-input" /><input name="postal_code" placeholder={text.postal} required onChange={update} data-testid="shipping-postal-input" /></div></div><div className="payment-note"><Crown size={18} /><span><b>{text.secure}</b><small>{text.paymentHint}</small></span><span className="payment-brand">stripe</span></div><button className="btn btn-coral full" data-testid="place-order-button">{text.placeOrder} · {format === "Hardcover" ? "$34.00" : "$22.00"} <ArrowRight size={17} /></button></form></main></Shell>; }
 

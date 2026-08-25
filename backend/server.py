@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from emergentintegrations.llm.openai import OpenAITextToSpeech
 from PIL import Image, ImageDraw
 
 
@@ -24,6 +25,8 @@ load_dotenv(ROOT_DIR / '.env')
 
 IMAGES_DIR = ROOT_DIR / "generated_images"
 IMAGES_DIR.mkdir(exist_ok=True)
+AUDIO_DIR = ROOT_DIR / "generated_audio"
+AUDIO_DIR.mkdir(exist_ok=True)
 
 
 def _ensure_placeholder() -> str:
@@ -105,6 +108,18 @@ TEXT_MODEL_PROVIDER = "gemini"
 TEXT_MODEL_NAME = "gemini-3-flash-preview"
 IMAGE_MODEL_PROVIDER = "gemini"
 IMAGE_MODEL_NAME = "gemini-3.1-flash-image-preview"
+
+TTS_MODEL = "tts-1"
+TTS_VOICE = "nova"
+
+
+def _clean_for_tts(text: str) -> str:
+    """Strip markdown/URLs so the narrator doesn't read symbols aloud."""
+    if not text:
+        return ""
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"[*_#>~|`]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 # ---------- AI Helpers ----------
@@ -240,6 +255,27 @@ async def generate_illustration(
     return None
 
 
+async def generate_narration(text: str, idx: int) -> Optional[str]:
+    """Generate one page of narration via OpenAI TTS; returns served path or None."""
+    cleaned = _clean_for_tts(text)
+    if not cleaned:
+        return None
+    try:
+        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio_bytes = await tts.generate_speech(
+            text=cleaned,
+            model=TTS_MODEL,
+            voice=TTS_VOICE,
+            response_format="mp3",
+        )
+        filename = f"{uuid.uuid4().hex}.mp3"
+        (AUDIO_DIR / filename).write_bytes(audio_bytes)
+        return f"/api/audio/{filename}"
+    except Exception as e:  # noqa: BLE001
+        logging.exception("Narration %s failed: %s", idx, e)
+        return None
+
+
 # ---------- Routes ----------
 @api_router.get("/")
 async def root():
@@ -281,6 +317,21 @@ async def create_story(input: StoryCreate):
     illustrations_generated = sum(1 for img in illustrations_raw if img)
     illustrations = [img or PLACEHOLDER_IMAGE for img in illustrations_raw]
 
+    # Generate narration audio for every page in parallel (batched to be nice to the API)
+    async def _batched_narration(texts: List[str]) -> List[Optional[str]]:
+        batch_size = 8
+        results: List[Optional[str]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start:start + batch_size]
+            results.extend(await asyncio.gather(*[
+                generate_narration(text, start + i) for i, text in enumerate(batch)
+            ]))
+        return results
+
+    page_texts = [p["text"] for p in story_data["pages"]]
+    audio_paths = await _batched_narration(page_texts)
+    narrations_generated = sum(1 for a in audio_paths if a)
+
     # Map each page to its illustration (every PAGES_PER_ILLUSTRATION pages share one)
     pages = []
     for i, page in enumerate(story_data["pages"]):
@@ -289,6 +340,7 @@ async def create_story(input: StoryCreate):
             "page": i + 1,
             "text": page["text"],
             "image": illustrations[illus_idx],
+            "audio": audio_paths[i],
         })
 
     story_id = str(uuid.uuid4())
@@ -305,6 +357,9 @@ async def create_story(input: StoryCreate):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "illustrations_generated": illustrations_generated,
         "illustrations_expected": ILLUSTRATION_COUNT,
+        "narrations_generated": narrations_generated,
+        "narrations_expected": len(page_texts),
+        "narrator_voice": TTS_VOICE,
         "status": "ready" if illustrations_generated == ILLUSTRATION_COUNT else "partial",
     }
     await db.stories.insert_one({**story})
@@ -391,6 +446,8 @@ app.include_router(api_router)
 
 # Serve generated illustrations as static files
 app.mount("/api/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
+# Serve narration audio as static files
+app.mount("/api/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
 
 app.add_middleware(
     CORSMiddleware,

@@ -33,6 +33,14 @@ high-quality physical printed copy.
 - Partial-failure signal: story includes `illustrations_generated` /
   `illustrations_expected` and `status: "ready" | "partial"`.
 - Generic client error message (no upstream billing text leaked).
+- **Read-aloud narrator** (OpenAI TTS, voice "nova") generated per page at
+  creation time, saved to `/app/backend/generated_audio/` and served via
+  `/api/audio/*` static mount. Storybook viewer has a "Read aloud" unlock
+  button (browser autoplay gate), auto-play on page change, auto-advance on
+  audio end, plus play/pause and mute controls. Story doc carries
+  `narrations_generated` / `narrations_expected` / `narrator_voice`.
+- A seeded `narrator-demo-01` story exists so the narration UI can be demoed
+  even when the Gemini text budget is exhausted.
 - Stripe checkout — **MOCKED** (order is stored but no real payment session).
 
 ## Backlog (prioritized)
