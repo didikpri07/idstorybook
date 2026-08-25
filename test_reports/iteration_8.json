@@ -1,0 +1,30 @@
+{
+  "summary": "Backend-only regression for the GET /api/stories projection change + narration/static mounts. Rewrote /app/backend/tests/backend_test.py into 24 pytest cases (22 passed, 2 skipped by design). Verified: GET /api/ (ai_enabled true), GET /api/stories lightweight shape (no `pages`/`_id`, all 10 required fields, sorted desc, cover_image fallback to first page image works for legacy records), GET /api/stories/narrator-demo-01 full detail with pages[{page,text,image,audio}] and reachable audio, 404 for unknown id, static mounts /api/images/placeholder.png (200 image/png) and /api/audio/narrator_demo.mp3 (200 audio/mpeg, 88KB), orders CRUD (create -> persist, list sorted newest first, PATCH valid/invalid/404, 422 on missing fields). POST /api/stories was called exactly ONCE to confirm budget behaviour and NOT hammered. Seeded narrator-demo-01 left intact.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/stories", "issue": "App correctly returns JSON 502 {'detail':'AI credit budget exceeded...'} (verified on localhost:8001), but through the public ingress the 502 is replaced by the platform's HTML error page, so the friendly detail never reaches the browser. Consider returning a 4xx (e.g. 402/409/429) or 200 with an error flag so the UI can surface the real message. (Frontend currently shows a generic text.createError anyway, so user impact is cosmetic.)"},
+      {"endpoint": "GET /api/stories", "issue": "Data hygiene: 22 of 23 stories are leftover QA/dev records (mostly 3-page stories with external Unsplash fallback covers). They will show in the user's library on a published app. Recommend purging non-demo stories before publishing."},
+      {"endpoint": "GET /api/stories", "issue": "created_at is sorted as a string; seeded narrator-demo-01 uses '2026-02-25T14:00:00Z' while generated stories use '+00:00' offsets. Sorting still works today but mixed formats are fragile; also the narration demo story lands last in the dashboard list."},
+      {"endpoint": "GET /api/stories", "issue": "No pagination (hard to_list(100) cap). Fine for now, but the library silently truncates past 100 stories."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: purge the 22 leftover QA stories from Mongo (keep narrator-demo-01) before publishing.",
+    "Optional: change the AI-budget failure status from 502 to a 4xx so the friendly detail survives the ingress, and surface err.response.data.detail in the create-story UI."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/stories projection change is correct: 'pages.image' keeps the payload light (8.2KB for 23 stories, ~200ms) and the cover fallback handles legacy records with no cover_image.",
+    "Consider storing created_at as a BSON datetime instead of an ISO string so sorting/indexing is format-independent.",
+    "Add an index on stories.created_at and stories.id (currently full-collection scan + sort on every dashboard load)."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (22/22 executed passed; 2 LLM-generation tests skipped intentionally)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "3 TEST_ orders created and deleted by the session teardown. No stories created. narrator-demo-01 untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "backend_test.py is now pytest-only and LLM-safe: the credit-spending generation tests are in TestStoryGeneration and skipped unless RUN_LLM_TESTS=1 is exported. Gemini text budget is exhausted (Current cost 1.949 / Max 1.0) so POST /api/stories returns 502 'AI credit budget exceeded' - do not retest it until the key is topped up. Order teardown only deletes orders with child_name starting TEST_, so the seeded story is safe.",
+  "rca_of_the_issue": "No defect found in the projection change. The only behavioural gap is that FastAPI's HTTPException(502) is intercepted by the Kubernetes ingress, which substitutes its own HTML 502 page, discarding the JSON detail body."
+}

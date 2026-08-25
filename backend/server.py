@@ -297,10 +297,15 @@ async def create_story(input: StoryCreate):
         logging.exception("Story text generation failed")
         message = str(e)
         if "budget" in message.lower() or "quota" in message.lower():
-            detail = "AI credit budget exceeded. Please top up your Emergent LLM key balance."
-        else:
-            detail = "Story generation is temporarily unavailable. Please try again shortly."
-        raise HTTPException(502, detail) from e
+            # 402 Payment Required — 5xx codes are swallowed by the ingress HTML page
+            raise HTTPException(
+                402,
+                "AI credit budget exceeded. Please top up your Emergent LLM key balance.",
+            ) from e
+        raise HTTPException(
+            503,
+            "Story generation is temporarily unavailable. Please try again shortly.",
+        ) from e
 
     # Generate all illustrations in parallel (small enough set to be safe)
     illustration_tasks = [
@@ -369,11 +374,17 @@ async def create_story(input: StoryCreate):
 
 @api_router.get("/stories")
 async def get_stories():
-    """Lightweight list: strip base64 image data from pages, keep cover only."""
-    stories = await db.stories.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    """Lightweight list: only fetch lightweight fields, skip the heavy pages payload."""
+    projection = {
+        "_id": 0, "id": 1, "child_name": 1, "age": 1, "gender": 1, "theme": 1,
+        "story_language": 1, "title": 1, "cover_image": 1, "created_at": 1,
+        "pages.image": 1,
+    }
+    stories = await db.stories.find({}, projection).sort("created_at", -1).to_list(100)
     lite = []
     for s in stories:
-        cover = s.get("cover_image") or (s.get("pages") or [{}])[0].get("image")
+        pages = s.get("pages") or []
+        cover = s.get("cover_image") or (pages[0].get("image") if pages else None)
         lite.append({
             "id": s.get("id"),
             "child_name": s.get("child_name"),
@@ -383,7 +394,7 @@ async def get_stories():
             "story_language": s.get("story_language", "en"),
             "title": s.get("title"),
             "cover_image": cover,
-            "page_count": len(s.get("pages") or []),
+            "page_count": len(pages),
             "created_at": s.get("created_at"),
         })
     return lite

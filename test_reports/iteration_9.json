@@ -1,0 +1,23 @@
+{
+  "summary": "Backend-only publish-prep verification through the public REACT_APP_BACKEND_URL ingress. 30 pytest tests (28 executed, 2 LLM-spend tests skipped by design): 27 passed, 1 failed. KEY RESULT: POST /api/stories now returns HTTP 402 with content-type application/json and the exact body {\"detail\":\"AI credit budget exceeded. Please top up your Emergent LLM key balance.\"} — the JSON arrives INTACT through the ingress (no HTML 502 page), verified for both en and hi payloads and via raw curl. Story purge confirmed: GET /api/stories returns exactly 1 item, id 'narrator-demo-01'; detail endpoint returns pages[0].audio='/api/audio/narrator_demo.mp3' and pages[0].image='/api/images/5bb37b7a66e041d7b1169c25cd36558f.png'. Static mounts OK: /api/audio/narrator_demo.mp3 -> 200 audio/mpeg, /api/images/placeholder.png -> 200 image/png, missing files -> 404. Orders CRUD fully working (create -> list persistence -> PATCH persistence -> 422 invalid status -> 404 unknown id). Failed generation leaves no story in Mongo. ONLY failure: GET /api/orders is NOT empty — 2 leftover QA orders from previous UI iterations remain.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/orders", "issue": "Expected [] for publish prep but 2 leftover QA orders remain in Mongo: id 68fba379-e2c3-4274-b8e9-6bab04cd5b77 (child_name 'UI Retest') and id 7067d15d-e34a-498d-a21b-b36d5aadcd47 (child_name 'Maya', story_id 'latest' pointing at a now-deleted story). The purge covered the stories collection only, not orders. Not deleted by me (outside test-created TEST_ prefix scope) — main agent should purge the orders collection."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": ["Purge the 2 leftover non-TEST orders from the Mongo orders collection so GET /api/orders returns [] before publish (ids 68fba379-..., 7067d15d-...)."],
+  "critical_code_review_comments": [
+    "create_story budget detection relies on substring matching str(e) for 'budget'/'quota'; if the upstream provider changes wording the user will see the generic 503 instead of the 402 top-up message. Consider also matching provider status codes (402/429) from the integration exception.",
+    "server.py is 481 lines and still single-file; acceptable now but split routes/AI helpers if it grows further."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "96% (27/28 executed)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Created 3 TEST_ orders during orders CRUD tests; all removed by the session teardown fixture (child_name ^TEST_). narrator-demo-01 story left untouched. No stories recreated.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "backend_test.py now has TestPublishPrep (402-through-ingress, single-story purge, media paths, no-leak-on-failure) and TestOrders::test_orders_clean_before_publish. LLM generation tests remain skipped unless RUN_LLM_TESTS=1 (Gemini text budget exhausted -> every POST /api/stories returns 402 in ~0.5s). Frontend was not exercised this iteration.",
+  "rca_of_the_issue": "Leftover orders were created by earlier UI-driven iterations using non-TEST_ child names, so the TEST_-prefixed teardown never removed them; the iteration-8 purge script targeted db.stories only."
+}
