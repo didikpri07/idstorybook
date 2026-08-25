@@ -19,7 +19,40 @@ function LanguagePanel({ language, setLanguage, text }) {
 
 function Shell({ children }) { const { language, setLanguage, text } = useLanguage(); return <div className="app-shell"><header className="topbar"><Link to="/" className="brand" data-testid="brand-home"><span className="brand-mark"><BookOpen size={19} /></span><span>Kids <b>Storybook</b></span></Link><nav><Link to="/dashboard" data-testid="nav-dashboard"><LayoutDashboard size={16} /> {text.library}</Link><Link to="/admin" data-testid="nav-admin"><Package size={16} /> {text.orders}</Link></nav><LanguagePanel language={language} setLanguage={setLanguage} text={text} /></header>{children}</div>; }
 
-function Home() { const { text } = useLanguage(); return <Shell><main className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={15} /> {text.homeEyebrow}</div><h1>{text.homeTitleA}<br /><em>{text.homeTitleB}</em></h1><p>{text.homeDescription}</p><div className="hero-actions"><Link to="/create" className="btn btn-primary" data-testid="create-book-button">{text.createBook} <ArrowRight size={17} /></Link><Link to="/dashboard" className="text-link" data-testid="view-library-link">{text.viewLibrary} <BookOpen size={16} /></Link></div><div className="trust"><div className="avatar-stack"><span>🌟</span><span>🦊</span><span>🌈</span><span>+</span></div><span>{text.loved}</span></div></div><div className="hero-art"><div className="sun" /><div className="art-label">{text.heroLabel} <b>{text.heroLabelBold}</b></div><img src="https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85" alt="Whimsical storybook scene" data-testid="hero-image" /><div className="floating-note note-one">✦ <b>{text.madeWonder}</b></div><div className="floating-note note-two">☼ {text.printed}</div></div></main><section className="theme-strip"><div><span className="section-kicker">{text.pickChapter}</span><h2>{text.whereGo}</h2></div><div className="theme-cards">{themes.map(theme => <div className={`theme-card ${theme.color}`} key={theme.name} data-testid={`theme-card-${theme.name.toLowerCase().replaceAll(" ", "-")}`}><span>{theme.icon}</span><b>{languageLabel(theme)}</b><small>{text.buildStory}</small></div>)}</div></section></Shell>; }
+function SamplePeek() {
+  const { text } = useLanguage();
+  const [story, setStory] = useState(null);
+  const [idx, setIdx] = useState(0);
+  const [tick, setTick] = useState(0);
+  useEffect(() => { axios.get(`${API}/stories/narrator-demo-01`).then(response => setStory(response.data)).catch(() => setStory(null)); }, []);
+  useEffect(() => {
+    if (!story || !story.pages || story.pages.length < 2) return;
+    const timer = setInterval(() => setIdx(previous => (previous + 1) % story.pages.length), 4200);
+    return () => clearInterval(timer);
+  }, [story, tick]);
+  if (!story || !story.pages || !story.pages.length) return null;
+  const page = story.pages[idx];
+  const selectPage = i => { setIdx(i); setTick(previous => previous + 1); };
+  return <section className="sample" data-testid="sample-peek-section">
+    <div className="sample-visual">
+      <img src={resolveImage(page.image)} alt="Sample story illustration" data-testid="sample-illustration" />
+      <span className="sample-page-badge">{text.samplePage} {idx + 1} / {story.pages.length}</span>
+      <span className="sample-narrator-chip"><Volume2 size={13} /> {text.sampleNarrated} · {story.narrator_voice || "nova"}</span>
+    </div>
+    <div className="sample-body">
+      <div className="eyebrow"><Sparkles size={13} /> {text.sampleEyebrow}</div>
+      <h2 className="sample-title">{text.sampleTitleA}<br /><em>{text.sampleTitleB}</em></h2>
+      <p className="sample-description">{text.sampleDescription}</p>
+      <p className="sample-preview" key={idx} data-testid="sample-preview-text">“{page.text}”</p>
+      <div className="sample-dots" data-testid="sample-dots">
+        {story.pages.map((_, i) => <button key={i} type="button" aria-label={`${text.samplePage} ${i + 1}`} className={i === idx ? "selected" : ""} onClick={() => selectPage(i)} data-testid={`sample-dot-${i}`}><span /></button>)}
+      </div>
+      <Link to={`/storybook/${story.id}`} className="btn btn-primary sample-cta" data-testid="sample-peek-cta">{text.sampleCta} <ArrowRight size={17} /></Link>
+    </div>
+  </section>;
+}
+
+function Home() { const { text } = useLanguage(); return <Shell><main className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={15} /> {text.homeEyebrow}</div><h1>{text.homeTitleA}<br /><em>{text.homeTitleB}</em></h1><p>{text.homeDescription}</p><div className="hero-actions"><Link to="/create" className="btn btn-primary" data-testid="create-book-button">{text.createBook} <ArrowRight size={17} /></Link><Link to="/dashboard" className="text-link" data-testid="view-library-link">{text.viewLibrary} <BookOpen size={16} /></Link></div><div className="trust"><div className="avatar-stack"><span>🌟</span><span>🦊</span><span>🌈</span><span>+</span></div><span>{text.loved}</span></div></div><div className="hero-art"><div className="sun" /><div className="art-label">{text.heroLabel} <b>{text.heroLabelBold}</b></div><img src="https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85" alt="Whimsical storybook scene" data-testid="hero-image" /><div className="floating-note note-one">✦ <b>{text.madeWonder}</b></div><div className="floating-note note-two">☼ {text.printed}</div></div></main><SamplePeek /><section className="theme-strip"><div><span className="section-kicker">{text.pickChapter}</span><h2>{text.whereGo}</h2></div><div className="theme-cards">{themes.map(theme => <div className={`theme-card ${theme.color}`} key={theme.name} data-testid={`theme-card-${theme.name.toLowerCase().replaceAll(" ", "-")}`}><span>{theme.icon}</span><b>{languageLabel(theme)}</b><small>{text.buildStory}</small></div>)}</div></section></Shell>; }
 function languageLabel(theme) { return window.localStorage.getItem("kids-storybook-ui") === "id" ? theme.id : theme.name; }
 
 function Create() {
