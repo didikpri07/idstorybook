@@ -1,63 +1,53 @@
-# Kids Storybook — Product Requirements & Handoff
+# Kids Storybook — PRD
 
-## Original problem statement
-Build a web application called “Kids Storybook”, a personalized digital children's book platform with an integrated e-commerce feature for physical book printing. Parents should be able to enter child details, upload a photo, generate a custom illustrated storybook using the child's likeness, preview it as a digital book, order a physical copy, track orders, and allow an admin to manage print orders.
+## Problem
+Personalized digital children's book platform. Parents upload a photo of their child,
+generate a custom illustrated storybook using the child's likeness, and can order a
+high-quality physical printed copy.
 
-## Product personas
-- **Storyteller parent:** Wants a joyful, low-friction way to make a meaningful keepsake for a child.
-- **Little reader:** Needs an expressive, safe, easy-to-read digital book experience.
-- **Studio admin:** Needs a scannable view of incoming print orders and production statuses.
+## Personas
+- Parent (primary): creates stories, orders prints, tracks shipping.
+- Child (secondary): reads the finished storybook.
+- Admin (internal): manages print orders and shipping statuses.
 
-## Core requirements (static)
-- Magical landing page with Create a Book and library pathways
-- Child onboarding with name, age, personality, photo field, and story theme
-- Generation loading state and illustrated story output
-- Digital storybook viewer with paging controls
-- Hardcover/softcover selection, shipping details, and payment-ready order flow
-- Dashboard for saved stories and order tracking
-- Admin view for print order status management
-- Responsive desktop/mobile UI
-- Backend persistence for stories and orders
-- Future hooks for LLM/image personalization and payment processing
+## Core requirements (from user)
+- Landing page with clear "Create a Book" and "Order a Printed Copy" CTAs.
+- Onboarding wizard: name, age, personality, photo, theme, story language.
+- Real AI: text via LLM, illustrations via image-gen using the child's photo as reference.
+- Digital flipbook viewer with page navigation.
+- Print checkout: format (Hardcover/Softcover), shipping details.
+- User dashboard: past stories + order status.
+- Admin panel: incoming orders, update production/shipping status.
+- Bilingual UI + story text: English (default), Bahasa Indonesia.
 
-## Architecture decisions
-- React 19 frontend with React Router, Axios, Framer Motion-ready structure, Lucide icons, and CSS custom styling.
-- FastAPI backend with Motor and the existing MongoDB connection from `backend/.env`.
-- Stories and orders use generated string IDs and ISO timestamps, avoiding MongoDB ObjectId serialization issues.
-- Frontend API calls use only `REACT_APP_BACKEND_URL`.
-- Demo-first flow: AI generation and payment are intentionally simulated while the story/order APIs and payloads are integration-ready.
-- Backend order statuses are constrained to `Order received`, `In production`, or `Shipped`.
+## What's implemented (as of 2026-02)
+- Full React + FastAPI + MongoDB stack (Feb 2026).
+- Landing / create wizard / digital flipbook / mocked checkout / dashboard / admin — done.
+- Bilingual UI (English + Bahasa Indonesia) — done.
+- **Real AI wired**: Gemini 3 Flash (32-page story text) + Gemini Nano Banana
+  (8 illustrations, child photo used as reference for character likeness),
+  via `emergentintegrations` + `EMERGENT_LLM_KEY`.
+- Illustrations saved to disk under `/app/backend/generated_images/` and served via
+  `/api/images/*` static mount (keeps Mongo documents small).
+- Local pastel placeholder image served when an illustration call fails.
+- Partial-failure signal: story includes `illustrations_generated` /
+  `illustrations_expected` and `status: "ready" | "partial"`.
+- Generic client error message (no upstream billing text leaked).
+- Stripe checkout — **MOCKED** (order is stored but no real payment session).
 
-## Implemented — 2026-08-25
-- Replaced starter screen with Kids Storybook visual system using Fredoka/Outfit typography, pastel atmosphere, expressive editorial layouts, responsive cards, and child-friendly imagery.
-- Added landing page, create wizard, simulated generation delay, story creation API, storybook viewer, checkout, dashboard, and admin order desk.
-- Added Mongo-backed `/api/stories` and `/api/orders` create/list/update routes.
-- Added story-aware checkout metadata so orders retain the originating story ID and child name.
-- Added error feedback for story creation, story loading, and checkout requests.
-- Added unique `data-testid` attributes across interactive and critical user-facing elements.
-- Verified desktop and 390px mobile journeys, backend persistence, order status validation, and no horizontal overflow.
-- Added persistent English/Bahasa Indonesia selectors for interface navigation and storybook language; Indonesian story titles and page copy are generated by the story API.
-- Completed English/Bahasa Indonesia interface copy across the creation wizard, storybook, checkout, dashboard, and admin desk; moved storybook language selection into the creation wizard while keeping interface language in the header.
-- Added localized Indonesian admin status labels with canonical API values, plus compact mobile navigation icons that preserve dashboard and order access without horizontal overflow.
+## Backlog (prioritized)
+- **P0** — Enable real Stripe test-mode checkout (`/api/orders` → Stripe session +
+  webhook, replacing current mock).
+- **P1** — Parent Accounts / auth so stories & orders tie to a logged-in user.
+- **P1** — Story generation as async job with polling (avoid ingress timeouts
+  during peak load; today it's a 25–60s synchronous request).
+- **P2** — Read-aloud / TTS narration per page.
+- **P2** — More unique illustrations per book (16 / 32) once budget / speed allow.
+- **P2** — Refactor `App.js` into per-route page components.
 
-## Prioritized backlog
-
-### P0 — next essential product work
-- Connect real LLM story generation using the Emergent LLM key.
-- Connect image generation/child likeness personalization with privacy-safe photo handling.
-- Replace simulated payment with a Stripe checkout session and webhook-backed fulfillment.
-
-### P1 — launch-quality experience
-- Add parent accounts and authenticated personal libraries.
-- Add upload storage and automatic image moderation/deletion policy.
-- Add order email updates and production/shipping timeline events.
-- Add real PDF export and print-provider fulfillment integration.
-
-### P2 — delightful enhancements
-- Add read-aloud narration with pause and replay.
-- Add more story worlds and reusable characters.
-- Add gift recipient flow and shareable digital preview link.
-
-## Current demo notes
-- AI generation is **MOCKED** with deterministic illustrated pages and a short loading state.
-- Payment processing is **MOCKED**; the checkout is Stripe-ready in product copy but does not create an external payment session yet.
+## Known constraints / notes
+- Story generation is synchronous and takes 25–60 s. Frontend sets a 180 s timeout.
+- 32 pages of text, 8 unique illustrations (each shared across 4 pages) — deliberate
+  trade-off for cost & latency.
+- Requires `EMERGENT_LLM_KEY` in `/app/backend/.env`; user needs enough balance —
+  budget-exhausted errors surface as a friendly 502 message.

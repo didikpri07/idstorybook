@@ -1,0 +1,37 @@
+{
+  "summary": "Backend-only regression of the real-AI Kids Storybook API (pytest, public preview URL). Created 4 stories total (EN, ID, with-photo, 1 probe). Text generation via Gemini works (32 pages, real AI prose, ~28-46s). CRITICAL: the EMERGENT_LLM_KEY budget is exhausted (Current cost 1.73 > Max budget 1.0), so Gemini Nano Banana image generation fails for most illustrations and falls back to a single external Unsplash placeholder; one story-text call also returned HTTP 502 for the same reason. All order endpoints, list/detail endpoints, static image serving and validation behaved correctly.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/stories", "issue": "EMERGENT_LLM_KEY budget exceeded (litellm BadRequestError: 'Budget has been exceeded! Current cost: 1.73, Max budget: 1.0'). Image generation fails for 5-8 of 8 illustrations -> 20/32 pages render the SAME external Unsplash placeholder. 'with photo' story produced only 6 unique images (expected 8), latest probe story only 4. Requires budget top-up / new key.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/stories (story_language='id')", "issue": "Returned HTTP 502 ('Story text generation failed: ... Budget has been exceeded') on the Indonesian run, so Bahasa Indonesia output could NOT be verified. Same root cause (budget). Retest after key/budget fix.", "priority": "HIGH"},
+      {"endpoint": "POST /api/stories", "issue": "Silent degradation: when illustrations fail, story is still persisted and returned with status='ready' and no warning field, so the client cannot distinguish a fully-illustrated book from one with 20/32 placeholder pages.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/stories", "issue": "Raw upstream provider error text (including billing/budget details) is echoed to the client in the 502 detail message - leaks internal info; return a generic message and log details."},
+      {"endpoint": "POST /api/stories", "issue": "Fallback image is an absolute https URL while generated images are relative '/api/images/...' paths - mixed shapes; frontend resolveImage() handles it today but this is fragile. Prefer a locally served placeholder PNG."},
+      {"endpoint": "POST /api/stories", "issue": "No timeout/retry around LLM calls; a single slow Gemini call can block the synchronous request past the ingress timeout (observed ~28-46s, ingress 502 risk)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results_iteration7.xml"],
+  "action_items": [
+    "Top up / replace EMERGENT_LLM_KEY budget - image generation is currently unusable (budget_exceeded).",
+    "Re-verify Indonesian story generation once budget is restored (it 502'd during this run).",
+    "Add per-illustration retry + expose a partial-failure indicator (e.g. images_generated count or status='partial') instead of silently substituting one placeholder for 20/32 pages.",
+    "Replace the external Unsplash fallback with a locally served /api/images placeholder and stop leaking upstream provider error text in the 502 detail."
+  ],
+  "critical_code_review_comments": [
+    "server.py create_story: asyncio.gather over 8 image calls has no per-task timeout and no retry; failures are swallowed into a shared placeholder with no signal to the caller.",
+    "HTTPException(502, f'Story text generation failed: {e}') exposes provider/billing internals to clients.",
+    "Story generation is fully synchronous (25-90s). Consider a job/polling model to avoid ingress 502s under load.",
+    "PATCH /api/orders validation (Literal status) and _id exclusion are correctly implemented - no issues found there."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/test_reports/iteration_7.json", "/app/test_reports/pytest/pytest_results_iteration7.xml"],
+  "success_rate": {"backend": "82% (14/17 first full run; 12/13 on the credit-free re-run). Failures all trace to LLM budget exhaustion.", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Stories: TEST_Riley (EN, 32 pages), TEST_Maya (photo, 32 pages), TEST_Probe (EN). Orders for TEST_Riley created and cleaned up via session teardown (orders with child_name ^TEST_ deleted).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "No auth in app; /app/memory/test_credentials.md not needed.",
+  "context_for_next_testing_agent": "Suite is /app/backend/tests/backend_test.py: TestHealth, TestStories (LLM-spending: EN/ID/photo creation - run sparingly), TestStoryReads (no LLM spend, reuses newest existing story: list/detail/404/image-serving/fallback check), TestOrders (full CRUD + 422/404). To retest without spending credits run: pytest tests/backend_test.py -k 'TestHealth or TestStoryReads or TestOrders'. VERIFIED PASSING: 32-page structure, real AI English prose, <90s generation, lightweight list (no pages, page_count=32, sorted desc), GET by id, /api/images/*.png serves image/png, missing image 404, 422 validation, order create/list/patch/422/404. STILL UNVERIFIED: Indonesian language output and 8 unique illustrations - both blocked by budget_exceeded.",
+  "rca_of_the_issue": "Backend logs (/var/log/supervisor/backend.err.log, 64 occurrences) show emergentintegrations -> litellm BadRequestError 'Budget has been exceeded! Current cost: 1.73126775, Max budget: 1.0' for both send_message (text) and send_message_multimodal_response (image). generate_illustration() catches the exception and returns None, and create_story maps None to a single Unsplash URL, so stories are stored as 'ready' with duplicate placeholder pages. Text calls sometimes still succeed, making the failure look intermittent. Fix = restore LLM budget, then add retries and a partial-failure signal."
+}
