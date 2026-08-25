@@ -1,0 +1,49 @@
+{
+  "app_name": "Kids Storybook",
+  "app_type": "hybrid_fullstack",
+  "theme": "Vibrant Play / Magical Pastel Editorial",
+  "typography": {
+    "heading_font": "Fredoka",
+    "body_font": "Outfit",
+    "mono_font": "JetBrains Mono"
+  },
+  "colors": {
+    "primary": "#6C5CE7",
+    "secondary": "#FF7675",
+    "accent": "#00CEC9",
+    "background": "#F9F8FD",
+    "card_bg": "#FFFFFF",
+    "text_dark": "#2D3436",
+    "text_muted": "#636E72"
+  },
+  "image_urls": [
+    {
+      "category": "hero_illustration",
+      "url": "https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "description": "Magical whimsical fairy tale children storybook illustration"
+    },
+    {
+      "category": "child_avatar",
+      "url": "https://images.unsplash.com/photo-1707396174323-dd31d3dd4a97?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "description": "Cute happy smiling child portrait for story character"
+    },
+    {
+      "category": "book_mockup",
+      "url": "https://images.unsplash.com/photo-1519764340700-3db40311f21e?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "description": "Printed hardcover children book mockup studio"
+    }
+  ],
+  "features": [
+    "Magical Landing Page with theme showcases and instant book generator teaser",
+    "Personalized Onboarding & AI Generation Wizard (child details, photo upload, theme selection, real-time stage progress)",
+    "Interactive Digital Flipbook Viewer (page-turning animation, illustrations, read-aloud voice simulator, download PDF)",
+    "Physical Print Order & Checkout Flow (Hardcover vs Softcover, gift box, Stripe/PayPal/Midtrans payment simulation)",
+    "User Dashboard (past generated stories, print order tracking with shipping timeline)",
+    "Admin Management Panel (incoming print orders, production status toggles, user metrics)"
+  ],
+  "accessibility_and_guidelines": {
+    "contrast_ratio": "APCA and WCAG AA compliant with dark readable text on soft pastel surfaces",
+    "interactive_requirements": "All buttons and interactive cards include data-testid attributes",
+    "motion": "Smooth Framer Motion entrance animations and page flip transitions respecting prefers-reduced-motion"
+  }
+}
