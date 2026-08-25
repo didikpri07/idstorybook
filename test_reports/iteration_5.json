@@ -1,0 +1,36 @@
+{
+  "summary": "Retested multilingual backend and UI flows across English default, Indonesian creation/story output, checkout, dashboard/admin routes, and 390px navigation.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Admin status dropdown",
+        "issue": "Indonesian admin UI still renders English option labels (Order received, In production, Shipped), violating complete Indonesian interface translation. Values are canonical and accepted by the API.",
+        "selector": "[data-testid^='order-status-'] option",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results_iteration5.xml"
+  ],
+  "action_items": [
+    "Add Indonesian display labels for admin status options while keeping submitted values Order received, In production, and Shipped canonical."
+  ],
+  "critical_code_review_comments": [
+    "AI generation remains MOCKED with deterministic story pages and payment processing remains MOCKED as documented."
+  ],
+  "updated_files": ["/app/test_reports/iteration_5.json"],
+  "success_rate": {"backend": "100% (2/2)", "frontend": "90% (one admin localization finding)"},
+  "seed_data_creation": "Created TEST_UI_Maya Indonesian story and TEST Buyer order through the public UI; demo records persist in the preview database.",
+  "retest_needed": true,
+  "should_call_test_agent_after_fix": true,
+  "context_for_next_testing_agent": "English default, language persistence, Indonesian wizard/story output, checkout submission, mobile nav visibility, and no horizontal overflow passed. Recheck admin status display labels in Indonesian mode; API canonical status submission passed in backend regression.",
+  "rca of the issue": "Admin.jsx equivalent in App.js uses text.orderReceived for the first option but uses text.production and text.shipped as both display labels and select values. The Indonesian copy leaves production and shipped in English and orderReceived is also English. Separate localized labels from canonical option values to preserve API compatibility."
+}
