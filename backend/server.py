@@ -43,6 +43,7 @@ class StoryCreate(BaseModel):
     gender: str
     theme: str
     photo_url: Optional[str] = None
+    story_language: str = "en"
 
 class OrderCreate(BaseModel):
     story_id: str
@@ -67,15 +68,17 @@ async def root():
 @api_router.post("/stories")
 async def create_story(input: StoryCreate):
     story_id = str(uuid.uuid4())
+    is_id = input.story_language == "id"
     story = {
         "id": story_id, "child_name": input.child_name, "age": input.age,
         "gender": input.gender, "theme": input.theme, "photo_url": input.photo_url,
-        "title": f"{input.child_name} and the {input.theme.title()} Adventure",
+        "story_language": input.story_language,
+        "title": f"{input.child_name} dan Petualangan {input.theme.title()}" if is_id else f"{input.child_name} and the {input.theme.title()} Adventure",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "pages": [
-            {"page": 1, "text": f"One bright morning, {input.child_name} discovered a tiny door behind the garden gate.", "image": "https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85"},
-            {"page": 2, "text": f"With a brave heart and a pocket full of sunshine, {input.child_name} stepped into a {input.theme.lower()} world.", "image": "https://images.unsplash.com/photo-1519764340700-3db40311f21e?crop=entropy&cs=srgb&fm=jpg&q=85"},
-            {"page": 3, "text": f"The new friends cheered: “Every great story begins with you, {input.child_name}!”", "image": "https://images.unsplash.com/photo-1707396174323-dd31d3dd4a97?crop=entropy&cs=srgb&fm=jpg&q=85"},
+            {"page": 1, "text": f"Pada suatu pagi yang cerah, {input.child_name} menemukan pintu kecil di balik gerbang taman." if is_id else f"One bright morning, {input.child_name} discovered a tiny door behind the garden gate.", "image": "https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85"},
+            {"page": 2, "text": f"Dengan hati pemberani dan saku penuh sinar matahari, {input.child_name} melangkah ke dunia {input.theme.lower()}." if is_id else f"With a brave heart and a pocket full of sunshine, {input.child_name} stepped into a {input.theme.lower()} world.", "image": "https://images.unsplash.com/photo-1519764340700-3db40311f21e?crop=entropy&cs=srgb&fm=jpg&q=85"},
+            {"page": 3, "text": f"Teman-teman baru bersorak: “Setiap cerita hebat dimulai dari kamu, {input.child_name}!”" if is_id else f"The new friends cheered: “Every great story begins with you, {input.child_name}!”", "image": "https://images.unsplash.com/photo-1707396174323-dd31d3dd4a97?crop=entropy&cs=srgb&fm=jpg&q=85"},
         ], "status": "ready"
     }
     await db.stories.insert_one({**story})
