@@ -71,7 +71,7 @@ high-quality physical printed copy.
 - **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
 - **P2** — Cover-Image Preview: show a live cover mock-up during creation.
 - **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
-- **P3** — Admin auth: add admin password or role check for `/admin` route.
+- **P3** — Admin auth: ✅ done — role-based, ADMIN_EMAILS env var gates /admin + /api/admin/orders + PATCH /api/orders/:id
 
 ## Known constraints / notes
 - Story generation is synchronous, 25–60 s. Frontend sets 180 s timeout.

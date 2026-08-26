@@ -65,6 +65,7 @@ MIDTRANS_CLIENT_KEY = os.environ.get('MIDTRANS_CLIENT_KEY')
 MIDTRANS_IS_PRODUCTION = os.environ.get('MIDTRANS_IS_PRODUCTION', 'false').lower() == 'true'
 MIDTRANS_SNAP_HOST = "https://app.midtrans.com" if MIDTRANS_IS_PRODUCTION else "https://app.sandbox.midtrans.com"
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()}
 
 # Book prices — defined server-side only, never from frontend
 BOOK_PRICES_USD = {"Hardcover": 34.0, "Softcover": 22.0}
@@ -393,6 +394,13 @@ async def get_optional_user(request: Request) -> Optional[dict]:
         return None
 
 
+async def get_admin_user(user: dict = Depends(get_current_user)) -> dict:
+    """Require the authenticated user to have role='admin'."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
 # ---------- Auth endpoints ----------
 
 @api_router.post("/auth/session")
@@ -419,9 +427,10 @@ async def auth_session(request: Request, response: Response):
     session_token = data["session_token"]
 
     existing = await db.users.find_one({"email": email}, {"_id": 0})
+    role = "admin" if email.lower() in ADMIN_EMAILS else "parent"
     if existing:
         user_id = existing["user_id"]
-        await db.users.update_one({"email": email}, {"$set": {"name": name, "picture": picture}})
+        await db.users.update_one({"email": email}, {"$set": {"name": name, "picture": picture, "role": role}})
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         await db.users.insert_one({
@@ -429,6 +438,7 @@ async def auth_session(request: Request, response: Response):
             "email": email,
             "name": name,
             "picture": picture,
+            "role": role,
             "created_at": datetime.now(timezone.utc),
         })
 
@@ -706,13 +716,13 @@ async def get_orders(user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/admin/orders")
-async def get_admin_orders():
+async def get_admin_orders(user: dict = Depends(get_admin_user)):
     """Admin view: all orders regardless of owner."""
     return await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
 
 
 @api_router.patch("/orders/{order_id}")
-async def update_order(order_id: str, input: OrderStatusUpdate):
+async def update_order(order_id: str, input: OrderStatusUpdate, user: dict = Depends(get_admin_user)):
     result = await db.orders.update_one({"id": order_id}, {"$set": {"status": input.status}})
     if not result.matched_count:
         raise HTTPException(404, "Order not found")

@@ -27,3 +27,6 @@
 .nav-signin{border:0;background:var(--purple);color:#fff;padding:9px 18px;border-radius:9px;font:600 13px Outfit;cursor:pointer;transition:transform .2s,box-shadow .2s}
 .nav-signin:hover{transform:translateY(-1px);box-shadow:0 6px 16px #6658d940}
 .topbar-right{display:flex;align-items:center;gap:12px}
+
+/* ---------- Admin badge ---------- */
+.admin-role-badge{background:var(--purple);color:#fff;font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:100px;text-transform:uppercase;line-height:1.4}

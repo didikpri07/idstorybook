@@ -88,6 +88,7 @@ function UserMenu({ user, logout, text }) {
       <button className="user-chip" onClick={() => setOpen(o => !o)} data-testid="user-menu-button">
         {user.picture ? <img src={user.picture} alt={user.name} className="user-avatar" referrerPolicy="no-referrer" /> : <span className="user-avatar-fallback">{(user.name || user.email || "U")[0].toUpperCase()}</span>}
         <span>{user.name?.split(" ")[0] || "Me"}</span>
+        {user.role === "admin" && <span className="admin-role-badge" data-testid="admin-badge">Admin</span>}
       </button>
       {open && (
         <div className="user-menu-drop" data-testid="user-dropdown">
@@ -130,6 +131,21 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
   if (loading) return <div className="app-shell"><div className="center-page"><span className="spinner" style={{ border: "2px solid #ddd9e8", borderTopColor: "var(--purple)", width: 28, height: 28 }} /></div></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="app-shell"><div className="center-page"><span className="spinner" style={{ border: "2px solid #ddd9e8", borderTopColor: "var(--purple)", width: 28, height: 28 }} /></div></div>;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (user.role !== "admin") return <Shell><div className="center-page" data-testid="access-denied-page">
+    <div className="success-icon" style={{ background: "#f1f0f7" }}>🔒</div>
+    <div className="eyebrow">Restricted area</div>
+    <h1 style={{ fontSize: "2rem" }}>Access Denied</h1>
+    <p className="center-sub">This page is only available to admins.<br />Signed in as <b>{user.email}</b>.</p>
+    <Link to="/dashboard" className="btn btn-primary" data-testid="back-to-dashboard-link">Go to my dashboard <ArrowRight size={17} /></Link>
+  </div></Shell>;
   return children;
 }
 
@@ -562,8 +578,8 @@ function Dashboard() {
 function Admin() {
   const { text, language } = useLanguage();
   const [orders, setOrders] = useState([]);
-  // Admin calls /api/admin/orders (no auth required) to see all orders
-  useEffect(() => { axios.get(`${API}/admin/orders`).then(response => setOrders(response.data)).catch(() => {}); }, []);
+  // Admin calls /api/admin/orders with auth cookie (same-origin)
+  useEffect(() => { axios.get(`${API}/admin/orders`, { withCredentials: true }).then(response => setOrders(response.data)).catch(() => {}); }, []);
   const change = async (order, status) => { await axios.patch(`${API}/orders/${order.id}`, { status }, { withCredentials: true }); setOrders(orders.map(item => item.id === order.id ? { ...item, status } : item)); };
   const statusLabels = language === "id" ? { received: "Pesanan diterima", production: "Dalam produksi", shipped: "Dikirim" } : { received: "Order received", production: "In production", shipped: "Shipped" };
   return <Shell><main className="dashboard">
@@ -606,7 +622,7 @@ function AppRouter() {
       <Route path="/checkout/success" element={<CheckoutSuccess />} />
       <Route path="/checkout/cancel" element={<CheckoutCancel />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<Admin />} />
+      <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
     </Routes>
   );
 }
