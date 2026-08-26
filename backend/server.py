@@ -221,6 +221,72 @@ Return ONLY a JSON object exactly like:
     return data
 
 
+async def _illustration_via_google(
+    prompt: str,
+    photo_b64: Optional[str],
+    idx: int,
+) -> Optional[str]:
+    """Try generating one illustration via Google AI Pro (GEMINI_API_KEY)."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    if photo_b64:
+        img_bytes_raw = base64.b64decode(photo_b64)
+        contents = [
+            types.Part.from_bytes(data=img_bytes_raw, mime_type="image/jpeg"),
+            types.Part.from_text(text=prompt),
+        ]
+    else:
+        contents = [prompt]
+
+    response = await client.aio.models.generate_content(
+        model="gemini-2.0-flash-exp",
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE", "TEXT"],
+        ),
+    )
+
+    for part in response.candidates[0].content.parts:
+        if hasattr(part, "inline_data") and part.inline_data:
+            raw = part.inline_data.data
+            if isinstance(raw, str):
+                raw = base64.b64decode(raw)
+            filename = f"{uuid.uuid4().hex}.png"
+            (IMAGES_DIR / filename).write_bytes(raw)
+            return f"/api/images/{filename}"
+    return None
+
+
+async def _illustration_via_emergent(
+    prompt: str,
+    photo_b64: Optional[str],
+    idx: int,
+) -> Optional[str]:
+    """Generate one illustration via Emergent LLM Key (fallback)."""
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"img-{uuid.uuid4()}",
+        system_message="You are an illustrator for children's storybooks.",
+    ).with_model(IMAGE_MODEL_PROVIDER, IMAGE_MODEL_NAME).with_params(
+        modalities=["image", "text"]
+    )
+
+    file_contents = [ImageContent(photo_b64)] if photo_b64 else None
+    msg = UserMessage(text=prompt, file_contents=file_contents) if file_contents else UserMessage(text=prompt)
+    _, images = await chat.send_message_multimodal_response(msg)
+
+    if images:
+        data_b64 = images[0].get("data", "")
+        img_bytes = base64.b64decode(data_b64)
+        filename = f"{uuid.uuid4().hex}.png"
+        (IMAGES_DIR / filename).write_bytes(img_bytes)
+        return f"/api/images/{filename}"
+    return None
+
+
 async def generate_illustration(
     scene_prompt: str,
     theme: str,
@@ -228,7 +294,7 @@ async def generate_illustration(
     photo_b64: Optional[str],
     idx: int,
 ) -> Optional[str]:
-    """Generate one illustration and return a data URL, or None on failure."""
+    """Generate one illustration: Google AI Pro first, Emergent LLM Key as fallback."""
     style = (
         "Soft watercolor children's storybook illustration, warm pastel palette, "
         "gentle lighting, whimsical, hand-painted texture, cheerful and safe for kids."
@@ -245,29 +311,24 @@ async def generate_illustration(
         "Full illustration, no text, no letters, no watermarks. Landscape composition."
     )
 
+    # --- Primary: Google AI Pro ---
+    if GEMINI_API_KEY:
+        try:
+            result = await _illustration_via_google(prompt, photo_b64, idx)
+            if result:
+                logging.info("Illustration %s generated via Google AI Pro", idx)
+                return result
+        except Exception as e:
+            logging.warning("Google AI illustration %s failed (%s), using Emergent fallback", idx, e)
+
+    # --- Fallback: Emergent LLM Key ---
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"img-{uuid.uuid4()}",
-            system_message="You are an illustrator for children's storybooks.",
-        ).with_model(IMAGE_MODEL_PROVIDER, IMAGE_MODEL_NAME).with_params(
-            modalities=["image", "text"]
-        )
-
-        file_contents = [ImageContent(photo_b64)] if photo_b64 else None
-        msg = UserMessage(text=prompt, file_contents=file_contents) if file_contents else UserMessage(text=prompt)
-        _, images = await chat.send_message_multimodal_response(msg)
-
-        if images:
-            img = images[0]
-            data_b64 = img.get("data", "")
-            img_bytes = base64.b64decode(data_b64)
-            filename = f"{uuid.uuid4().hex}.png"
-            file_path = IMAGES_DIR / filename
-            file_path.write_bytes(img_bytes)
-            return f"/api/images/{filename}"
-    except Exception as e:  # noqa: BLE001
-        logging.exception("Illustration %s failed: %s", idx, e)
+        result = await _illustration_via_emergent(prompt, photo_b64, idx)
+        if result:
+            logging.info("Illustration %s generated via Emergent LLM", idx)
+        return result
+    except Exception as e:
+        logging.exception("Emergent illustration %s also failed: %s", idx, e)
     return None
 
 

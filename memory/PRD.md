@@ -26,6 +26,11 @@ high-quality physical printed copy.
 - Bilingual UI (English + Bahasa Indonesia) — done.
 - **Real AI wired**: Gemini Flash (story text) + Gemini Nano Banana (illustrations),
   via `emergentintegrations` + `EMERGENT_LLM_KEY`.
+- **AI Image Gen dual-provider fallback**:
+  - Primary: Google AI Pro (`GEMINI_API_KEY`, `google-genai` SDK, `gemini-2.0-flash-exp`).
+  - Fallback: Emergent LLM Key (`emergentintegrations`, `gemini-3.1-flash-image-preview`).
+  - If Google fails (quota, billing, network), Emergent is tried automatically.
+  - Activate primary by enabling billing on Google AI Studio.
 - Illustrations saved to disk under `/app/backend/generated_images/` served via `/api/images/*`.
 - Narration audio saved to `/app/backend/generated_audio/` served via `/api/audio/*`.
 - Read-aloud narrator (OpenAI TTS, voice "nova") per page, auto-play + auto-advance.
@@ -42,7 +47,8 @@ high-quality physical printed copy.
 
 ## Backlog (prioritized)
 - **P0** — Enable Google AI billing so image generation via `GEMINI_API_KEY` works
-  (text already works; image gen quota is 0 on free tier).
+  (text already works; once billing is on, Google AI Pro is the primary illustrator
+  with Emergent as automatic fallback — no code change needed).
 - **P1** — Parent Accounts / auth so stories & orders tie to a logged-in user.
 - **P1** — Story generation as async job with polling (avoid ingress timeouts).
 - **P2** — Refactor `App.js` monolith into `/pages/` directory structure.
