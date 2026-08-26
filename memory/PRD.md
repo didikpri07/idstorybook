@@ -89,3 +89,25 @@ high-quality physical printed copy.
 - Midtrans uses production VT- keys — fully live for Indonesian customers.
 - MongoDB collections: users, user_sessions, stories, orders.
 - CORS: locked to FRONTEND_URL env var (not wildcard) to support httpOnly cookies.
+
+## Code Architecture (current — post-refactor 2026-08)
+
+```
+/app/frontend/src/
+├── App.js                      # Router + providers only (47 lines)
+├── App.css / Language.css      # Global styles
+├── i18n.js                     # Bilingual translations (EN/ID)
+├── context/AuthContext.js      # AuthProvider + useAuth
+├── lib/constants.js            # API, themes, BOOK_PRICES, helpers
+├── components/
+│   ├── Shell.jsx               # Nav, UserMenu, LanguagePanel
+│   ├── ProtectedRoute.jsx      # ProtectedRoute + AdminRoute
+│   ├── CoverPreview.jsx
+│   ├── StylePicker.jsx
+│   └── SamplePeek.jsx
+└── pages/
+    ├── Home.jsx, Create.jsx, Storybook.jsx
+    ├── Checkout.jsx, CheckoutSuccess.jsx, CheckoutCancel.jsx
+    ├── Dashboard.jsx, Admin.jsx, Login.jsx, AuthCallback.jsx
+```
+
