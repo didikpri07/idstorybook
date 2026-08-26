@@ -22,6 +22,11 @@ high-quality physical printed copy.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
 ## What's implemented (as of 2026-08)
+- **Story Idea / Custom Prompt (2026-08) — DONE**:
+  - Optional `story_prompt` textarea in the create form (300 char limit, live counter).
+  - Positioned between theme picker and visual style picker.
+  - When provided, the LLM receives a "Parent's special story idea / direction" block, making it the heart of the story.
+  - Fully backward-compatible — existing stories without a prompt are unaffected.
 - **Background Story Generation (P1) — DONE**:
   - `POST /api/stories` now returns immediately (< 2s) with `status: "processing"`.
   - `run_story_generation()` FastAPI BackgroundTask runs full AI pipeline (text → illustrations → audio).

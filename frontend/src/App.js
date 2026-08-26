@@ -331,7 +331,7 @@ function Home() {
 
 function Create() {
   const { language, text } = useLanguage();
-  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en" });
+  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en", story_prompt: "" });
   const [photoName, setPhotoName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -413,6 +413,25 @@ function Create() {
         <label>{text.personality}<select name="gender" value={form.gender} onChange={update} required data-testid="child-gender-select"><option value="">{text.choose}</option><option>{language === "id" ? "Pemberani" : "Adventurous"}</option><option>{language === "id" ? "Penasaran" : "Curious"}</option><option>{language === "id" ? "Imajinatif" : "Imaginative"}</option></select></label>
       </div>
       <label>{text.world}<select name="theme" value={form.theme} onChange={update} data-testid="story-theme-select">{themes.map(theme => <option key={theme.name} value={theme.name}>{language === "id" ? theme.id : theme.name}</option>)}</select></label>
+      <div className="field-block story-prompt-field">
+        <label className="field-label">{text.storyPromptLabel} <span className="optional-tag">{text.storyPromptOptional}</span></label>
+        <div className="story-prompt-wrap">
+          <textarea
+            name="story_prompt"
+            value={form.story_prompt}
+            onChange={update}
+            maxLength={300}
+            rows={3}
+            placeholder={language === "id"
+              ? "contoh: Anakku sering meninggalkan cangkir di mana-mana. Buat cerita lucu tentang bagaimana ia belajar membereskannya."
+              : "e.g. My 7-year-old doesn't want to sleep over at grandma's. Help them feel brave and excited about the adventure."}
+            className="story-prompt-textarea"
+            data-testid="story-prompt-textarea"
+          />
+          <span className={`char-count${form.story_prompt.length > 270 ? " near-limit" : ""}`} data-testid="story-prompt-char-count">{form.story_prompt.length} / 300</span>
+        </div>
+        <small className="story-prompt-helper">{text.storyPromptHelper}</small>
+      </div>
       <div className="field-block">
         <label className="field-label">{text.visualStyle}</label>
         <StylePicker value={form.visual_style} onChange={v => setForm(f => ({ ...f, visual_style: v }))} />

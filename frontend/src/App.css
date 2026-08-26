@@ -60,7 +60,16 @@
 .style-card small{font-size:9px;color:var(--muted)}
 @media(max-width:520px){.style-picker{grid-template-columns:repeat(2,1fr)}}
 
-/* ---------- Generating / Processing screen ---------- */
+/* ---------- Story prompt textarea ---------- */
+.story-prompt-field{gap:4px}
+.story-prompt-wrap{position:relative;display:flex;flex-direction:column}
+.story-prompt-textarea{font:14px/1.55 Outfit;color:var(--ink);background:#fff;border:1px solid #ddd9e8;border-radius:8px;padding:13px 14px;outline:none;width:100%;resize:vertical;min-height:88px;transition:border-color .2s,box-shadow .2s}
+.story-prompt-textarea:focus{border-color:var(--purple);box-shadow:0 0 0 3px #6658d91a}
+.story-prompt-textarea::placeholder{color:#bcb9c9}
+.char-count{font-size:10px;color:var(--muted);text-align:right;margin-top:4px;letter-spacing:.2px}
+.char-count.near-limit{color:var(--coral);font-weight:600}
+.optional-tag{font-size:10px;font-weight:400;color:var(--muted);margin-left:4px}
+.story-prompt-helper{font-size:11px;color:var(--muted);margin-top:2px}
 .generating-page{padding-top:80px;padding-bottom:80px}
 .generating-icon-wrap{display:flex;justify-content:center;margin-bottom:28px}
 .generating-book-pulse{width:72px;height:72px;border-radius:50%;background:var(--lav);color:var(--purple);display:grid;place-items:center;animation:bookPulse 1.8s ease-in-out infinite}

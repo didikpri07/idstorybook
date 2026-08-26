@@ -127,6 +127,7 @@ class StoryCreate(BaseModel):
     visual_style: str = "Classic Watercolor"
     photo_base64: Optional[str] = None  # data URL or raw base64
     story_language: str = "en"
+    story_prompt: Optional[str] = None  # Parent's custom story idea / direction
 
 
 class OrderCreate(BaseModel):
@@ -191,7 +192,8 @@ def _parse_json_from_text(text: str) -> dict:
 
 
 async def generate_story_text(
-    child_name: str, age: int, gender: str, theme: str, language: str
+    child_name: str, age: int, gender: str, theme: str, language: str,
+    story_prompt: Optional[str] = None,
 ) -> dict:
     """Generate a personalized storybook with title and illustration prompts using Gemini."""
     lang_name = "Bahasa Indonesia" if language == "id" else "English"
@@ -200,6 +202,18 @@ async def generate_story_text(
         "imaginative stories with simple vocabulary and gentle rhythm. Always respond in "
         "valid JSON only, without any prose outside the JSON object."
     )
+
+    # Build optional story direction block
+    story_direction_block = ""
+    if story_prompt and story_prompt.strip():
+        story_direction_block = f"""
+Parent's special story idea / direction:
+"{story_prompt.strip()}"
+
+Important: Make this the heart of the story. {child_name} should face exactly this situation,
+challenge, or topic as the central adventure — resolve it warmly and age-appropriately.
+"""
+
     user_prompt = f"""Write a {PAGES_PER_BOOK}-page personalized children's storybook.
 
 Child details:
@@ -208,7 +222,7 @@ Child details:
 - Personality: {gender}
 - Theme / World: {theme}
 - Language: {lang_name}
-
+{story_direction_block}
 Requirements:
 - The story must be in {lang_name}.
 - Age-appropriate for a {age}-year-old (short sentences, kind tone, no scary content).
@@ -564,7 +578,8 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
     """Background task: run full AI generation pipeline and update the story document when done."""
     try:
         story_data = await generate_story_text(
-            input.child_name, input.age, input.gender, input.theme, input.story_language
+            input.child_name, input.age, input.gender, input.theme, input.story_language,
+            story_prompt=input.story_prompt,
         )
     except Exception as e:
         logging.exception("Background story text generation failed for %s", story_id)
@@ -655,6 +670,7 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
         "theme": input.theme,
         "visual_style": input.visual_style,
         "story_language": input.story_language,
+        "story_prompt": input.story_prompt or None,
         "title": f"{input.child_name}'s Story",
         "pages": [],
         "cover_image": PLACEHOLDER_IMAGE,
