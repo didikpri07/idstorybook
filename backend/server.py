@@ -59,6 +59,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', 'sk_test_emergent')
 MIDTRANS_SERVER_KEY = os.environ.get('MIDTRANS_SERVER_KEY')
 MIDTRANS_CLIENT_KEY = os.environ.get('MIDTRANS_CLIENT_KEY')
@@ -846,9 +847,15 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def on_startup():
+    from pymongo.errors import OperationFailure
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
-    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    # Recreate expires_at index without TTL if an old TTL version exists
+    try:
+        await db.user_sessions.create_index("expires_at")
+    except OperationFailure:
+        await db.user_sessions.drop_index("expires_at_1")
+        await db.user_sessions.create_index("expires_at")
 
 
 @app.on_event("shutdown")
