@@ -69,7 +69,7 @@ high-quality physical printed copy.
 - **P1** — Story generation as async job with polling (avoid ingress timeouts on slow connections).
 - **P2** — Refactor `App.js` monolith into `/pages/` directory structure.
 - **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
-- **P2** — Cover-Image Preview: show a live cover mock-up during creation.
+- **P2** — Cover-Image Preview: ✅ done — live 3D book cover in creation wizard, updates in real-time as parent types name/changes theme/uploads photo.
 - **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
 - **P3** — Admin auth: ✅ done — role-based, ADMIN_EMAILS env var gates /admin + /api/admin/orders + PATCH /api/orders/:id
 

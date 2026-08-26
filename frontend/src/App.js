@@ -18,6 +18,37 @@ const themes = [{ name: "Moonlit Forest", id: "Hutan Cahaya Bulan", icon: "✦",
 const storyLanguages = [{ code: "en", label: "English", flag: "🇬🇧" }, { code: "id", label: "Bahasa Indonesia", flag: "🇮🇩" }];
 function languageLabel(theme) { return window.localStorage.getItem("kids-storybook-ui") === "id" ? theme.id : theme.name; }
 
+const COVER_THEMES = {
+  "Moonlit Forest":  { bg: "linear-gradient(155deg,#0f0c29 0%,#302b63 55%,#1a3a2a 100%)", spine: "#09071c", accent: "#c4b5fd", star: "✦", emoji: "🌙" },
+  "Ocean Explorer":  { bg: "linear-gradient(155deg,#0c4a6e 0%,#0284c7 55%,#0e7490 100%)", spine: "#082e45", accent: "#7dd3fc", star: "≈", emoji: "🌊" },
+  "Dinosaur Valley": { bg: "linear-gradient(155deg,#14532d 0%,#15803d 55%,#713f12 100%)", spine: "#0a321b", accent: "#86efac", star: "◈", emoji: "🦕" },
+};
+
+function CoverPreview({ childName, theme, photoBase64 }) {
+  const t = COVER_THEMES[theme] || COVER_THEMES["Moonlit Forest"];
+  const name = childName?.trim() || "Your Child";
+  return (
+    <div className="cover-preview-wrap" data-testid="cover-preview">
+      <div className="cover-3d">
+        <div className="book-spine" style={{ background: t.spine }}>
+          <span>{name[0]?.toUpperCase() || "?"}</span>
+        </div>
+        <div className="book-face" style={{ background: t.bg }}>
+          <div className="cover-deco" style={{ color: t.accent }}>{t.star} {t.emoji} {t.star}</div>
+          {photoBase64
+            ? <div className="cover-photo-ring" style={{ borderColor: t.accent }}><img src={photoBase64} alt="Child" className="cover-photo-img" /></div>
+            : <div className="cover-photo-ring cover-photo-empty" style={{ borderColor: t.accent, color: t.accent }}><User size={28} /></div>
+          }
+          <div className="cover-child-name" style={{ color: t.accent }} data-testid="cover-child-name">{name}</div>
+          <div className="cover-tagline">& the {theme}</div>
+          <div className="cover-brand-label">Kids Storybook</div>
+        </div>
+      </div>
+      <p className="cover-caption">Live cover preview · updates as you type</p>
+    </div>
+  );
+}
+
 function loadMidtransSnap() {
   return new Promise((resolve, reject) => {
     if (window.snap) { resolve(window.snap); return; }
@@ -298,6 +329,7 @@ function Create() {
       <h1>{text.createTitleA}<br /><em>{text.createTitleB}</em></h1>
       <p>{text.createDescription}</p>
       <div className="steps"><span className="active">01</span><i /><span>02</span><i /><span>03</span></div>
+      <CoverPreview childName={form.child_name} theme={form.theme} photoBase64={form.photo_base64} />
     </div>
     <form className="form-panel" onSubmit={submit}>
       {error && <div className="error-message" role="alert" data-testid="create-error-message">{error}</div>}

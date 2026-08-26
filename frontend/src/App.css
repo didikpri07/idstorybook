@@ -30,3 +30,20 @@
 
 /* ---------- Admin badge ---------- */
 .admin-role-badge{background:var(--purple);color:#fff;font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:100px;text-transform:uppercase;line-height:1.4}
+
+/* ---------- Cover Preview ---------- */
+.cover-preview-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:14px;margin-top:36px}
+.cover-3d{display:flex;filter:drop-shadow(0 22px 44px rgba(0,0,0,.28));transform:perspective(700px) rotateY(-18deg);transition:transform .45s cubic-bezier(.25,.46,.45,.94)}
+.cover-3d:hover{transform:perspective(700px) rotateY(-7deg)}
+.book-spine{width:22px;height:230px;border-radius:4px 0 0 4px;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;font:700 9px Outfit;color:rgba(255,255,255,.45);padding:10px 0}
+.book-face{width:162px;height:230px;border-radius:0 8px 8px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;gap:7px;position:relative;overflow:hidden}
+.book-face::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.09) 0%,transparent 60%);pointer-events:none}
+.cover-deco{font-size:11px;letter-spacing:5px;opacity:.85}
+.cover-photo-ring{width:82px;height:82px;border-radius:50%;border:2.5px solid;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12)}
+.cover-photo-empty{background:rgba(255,255,255,.1)}
+.cover-photo-img{width:100%;height:100%;object-fit:cover}
+.cover-child-name{font:700 15px/1.2 Fredoka;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,.4);transition:all .3s}
+.cover-tagline{font:400 9px/1.3 Outfit;color:rgba(255,255,255,.65);text-align:center}
+.cover-brand-label{position:absolute;bottom:9px;font:700 7px Outfit;color:rgba(255,255,255,.35);letter-spacing:1.5px;text-transform:uppercase}
+.cover-caption{font-size:11px;color:var(--muted);margin-left:22px}
+@media(max-width:720px){.cover-preview-wrap{align-items:center;margin-top:24px}.cover-3d{transform:perspective(700px) rotateY(-12deg)}.cover-caption{margin-left:0}}
