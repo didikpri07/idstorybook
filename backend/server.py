@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Literal
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from emergentintegrations.llm.openai import OpenAITextToSpeech
@@ -64,6 +64,7 @@ MIDTRANS_SERVER_KEY = os.environ.get('MIDTRANS_SERVER_KEY')
 MIDTRANS_CLIENT_KEY = os.environ.get('MIDTRANS_CLIENT_KEY')
 MIDTRANS_IS_PRODUCTION = os.environ.get('MIDTRANS_IS_PRODUCTION', 'false').lower() == 'true'
 MIDTRANS_SNAP_HOST = "https://app.midtrans.com" if MIDTRANS_IS_PRODUCTION else "https://app.sandbox.midtrans.com"
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # Book prices — defined server-side only, never from frontend
 BOOK_PRICES_USD = {"Hardcover": 34.0, "Softcover": 22.0}
@@ -353,6 +354,124 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
         return None
 
 
+# ---------- Auth helpers ----------
+
+async def get_current_user(request: Request) -> dict:
+    """Validate session token from httpOnly cookie or Authorization header."""
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(401, "Session not found")
+
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(401, "Session expired")
+
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
+
+
+async def get_optional_user(request: Request) -> Optional[dict]:
+    """Like get_current_user but returns None instead of raising 401."""
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
+
+
+# ---------- Auth endpoints ----------
+
+@api_router.post("/auth/session")
+async def auth_session(request: Request, response: Response):
+    """Exchange a short-lived session_id from Emergent OAuth for a persistent session."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    if not session_id:
+        raise HTTPException(400, "session_id required")
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": session_id},
+        )
+    if resp.status_code != 200:
+        logging.error("Emergent auth session-data error %s: %s", resp.status_code, resp.text)
+        raise HTTPException(401, "Invalid or expired session_id")
+
+    data = resp.json()
+    email = data["email"]
+    name = data.get("name", "")
+    picture = data.get("picture", "")
+    session_token = data["session_token"]
+
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one({"email": email}, {"$set": {"name": name, "picture": picture}})
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc),
+    })
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=7 * 24 * 3600,
+        path="/",
+    )
+
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user}
+
+
+@api_router.get("/auth/me")
+async def auth_me(user: dict = Depends(get_current_user)):
+    return user
+
+
+@api_router.post("/auth/logout")
+async def auth_logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie(key="session_token", path="/", samesite="none", secure=True)
+    return {"status": "logged out"}
+
+
 # ---------- Payment helpers ----------
 
 async def _midtrans_snap_token(order_id: str, input: OrderCreate, amount_idr: int) -> dict:
@@ -405,9 +524,10 @@ async def root():
     return {"message": "Kids Storybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
 
 @api_router.post("/stories")
-async def create_story(input: StoryCreate):
+async def create_story(input: StoryCreate, request: Request):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "EMERGENT_LLM_KEY not configured on the server")
+    user = await get_optional_user(request)
 
     photo_b64 = _strip_data_url(input.photo_base64)
 
@@ -473,6 +593,7 @@ async def create_story(input: StoryCreate):
     story_id = str(uuid.uuid4())
     story = {
         "id": story_id,
+        "user_id": user["user_id"] if user else None,
         "child_name": input.child_name,
         "age": input.age,
         "gender": input.gender,
@@ -495,14 +616,14 @@ async def create_story(input: StoryCreate):
 
 
 @api_router.get("/stories")
-async def get_stories():
+async def get_stories(user: dict = Depends(get_current_user)):
     """Lightweight list: only fetch lightweight fields, skip the heavy pages payload."""
     projection = {
         "_id": 0, "id": 1, "child_name": 1, "age": 1, "gender": 1, "theme": 1,
         "story_language": 1, "title": 1, "cover_image": 1, "created_at": 1,
         "pages.image": 1,
     }
-    stories = await db.stories.find({}, projection).sort("created_at", -1).to_list(100)
+    stories = await db.stories.find({"user_id": user["user_id"]}, projection).sort("created_at", -1).to_list(100)
     lite = []
     for s in stories:
         pages = s.get("pages") or []
@@ -531,13 +652,15 @@ async def get_story(story_id: str):
 
 
 @api_router.post("/orders")
-async def create_order(input: OrderCreate):
+async def create_order(input: OrderCreate, request: Request):
+    user = await get_optional_user(request)
     order_id = str(uuid.uuid4())
     is_indonesia = input.country.strip().lower() in ("indonesia", "id")
     gateway = "midtrans" if is_indonesia else "stripe"
 
     order = {
         "id": order_id,
+        "user_id": user["user_id"] if user else None,
         "story_id": input.story_id,
         "child_name": input.child_name,
         "format": input.format,
@@ -577,7 +700,14 @@ async def create_order(input: OrderCreate):
 
 
 @api_router.get("/orders")
-async def get_orders():
+async def get_orders(user: dict = Depends(get_current_user)):
+    """Return orders for the authenticated user."""
+    return await db.orders.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+
+@api_router.get("/admin/orders")
+async def get_admin_orders():
+    """Admin view: all orders regardless of owner."""
     return await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
 
 
@@ -692,7 +822,7 @@ app.mount("/api/audio", StaticFiles(directory=str(AUDIO_DIR)), name="audio")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[FRONTEND_URL],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -702,6 +832,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def on_startup():
+    await db.users.create_index("email", unique=True)
+    await db.user_sessions.create_index("session_token")
+    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
 
 
 @app.on_event("shutdown")
