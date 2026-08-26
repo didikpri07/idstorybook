@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,8 +7,11 @@ import os
 import re
 import json
 import base64
+import hashlib
+import hmac
 import logging
 import asyncio
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Literal
@@ -17,6 +20,9 @@ from datetime import datetime, timezone
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from emergentintegrations.llm.openai import OpenAITextToSpeech
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout, CheckoutSessionRequest,
+)
 from PIL import Image, ImageDraw
 
 
@@ -53,6 +59,15 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', 'sk_test_emergent')
+MIDTRANS_SERVER_KEY = os.environ.get('MIDTRANS_SERVER_KEY')
+MIDTRANS_CLIENT_KEY = os.environ.get('MIDTRANS_CLIENT_KEY')
+MIDTRANS_IS_PRODUCTION = os.environ.get('MIDTRANS_IS_PRODUCTION', 'false').lower() == 'true'
+MIDTRANS_SNAP_HOST = "https://app.midtrans.com" if MIDTRANS_IS_PRODUCTION else "https://app.sandbox.midtrans.com"
+
+# Book prices — defined server-side only, never from frontend
+BOOK_PRICES_USD = {"Hardcover": 34.0, "Softcover": 22.0}
+BOOK_PRICES_IDR = {"Hardcover": 549000, "Softcover": 359000}
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -87,12 +102,13 @@ class OrderCreate(BaseModel):
     child_name: str
     format: str
     gift_box: bool = False
-    payment_method: str
     customer_name: str
     email: str
     address: str
     city: str
     postal_code: str
+    country: str = "Other"
+    origin_url: str = ""  # frontend sends window.location.origin for Stripe redirect URLs
 
 
 class OrderStatusUpdate(BaseModel):
@@ -276,11 +292,56 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
         return None
 
 
+# ---------- Payment helpers ----------
+
+async def _midtrans_snap_token(order_id: str, input: OrderCreate, amount_idr: int) -> dict:
+    """Create a Midtrans Snap transaction and return token + redirect_url."""
+    item_name = f"Kids Storybook – {input.format} ({input.child_name})"[:50]
+    payload = {
+        "transaction_details": {"order_id": order_id, "gross_amount": amount_idr},
+        "customer_details": {"first_name": input.customer_name, "email": input.email},
+        "item_details": [{"id": input.format.lower(), "price": amount_idr, "quantity": 1, "name": item_name}],
+        "callbacks": {"finish": f"{input.origin_url}/checkout/success?order_id={order_id}"},
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{MIDTRANS_SNAP_HOST}/snap/v1/transactions",
+            json=payload,
+            auth=(MIDTRANS_SERVER_KEY, ""),
+            headers={"Accept": "application/json"},
+        )
+    if resp.status_code not in (200, 201):
+        logging.error("Midtrans Snap error %s: %s", resp.status_code, resp.text)
+        raise HTTPException(502, "Payment service temporarily unavailable. Please try again.")
+    result = resp.json()
+    return {"snap_token": result["token"], "redirect_url": result.get("redirect_url", "")}
+
+
+async def _stripe_checkout_session(order_id: str, input: OrderCreate, amount_usd: float) -> dict:
+    """Create a Stripe Checkout session and return url + session_id."""
+    origin = input.origin_url.rstrip("/") or "https://localhost:3000"
+    success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&order_id={order_id}"
+    cancel_url = f"{origin}/checkout/cancel?order_id={order_id}"
+
+    stripe_checkout = StripeCheckout(
+        api_key=STRIPE_API_KEY,
+        webhook_url=f"{origin}/api/webhook/stripe",
+    )
+    req = CheckoutSessionRequest(
+        amount=amount_usd,
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"order_id": order_id, "child_name": input.child_name, "format": input.format},
+    )
+    session = await stripe_checkout.create_checkout_session(req)
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+
 # ---------- Routes ----------
 @api_router.get("/")
 async def root():
     return {"message": "Kids Storybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
-
 
 @api_router.post("/stories")
 async def create_story(input: StoryCreate):
@@ -410,14 +471,48 @@ async def get_story(story_id: str):
 
 @api_router.post("/orders")
 async def create_order(input: OrderCreate):
+    order_id = str(uuid.uuid4())
+    is_indonesia = input.country.strip().lower() in ("indonesia", "id")
+    gateway = "midtrans" if is_indonesia else "stripe"
+
     order = {
-        "id": str(uuid.uuid4()),
-        **input.model_dump(),
+        "id": order_id,
+        "story_id": input.story_id,
+        "child_name": input.child_name,
+        "format": input.format,
+        "gift_box": input.gift_box,
+        "customer_name": input.customer_name,
+        "email": input.email,
+        "address": input.address,
+        "city": input.city,
+        "postal_code": input.postal_code,
+        "country": input.country,
         "status": "Order received",
+        "payment_status": "pending",
+        "payment_gateway": gateway,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.orders.insert_one({**order})
-    return order
+
+    try:
+        if is_indonesia:
+            amount_idr = BOOK_PRICES_IDR.get(input.format, BOOK_PRICES_IDR["Hardcover"])
+            payment_data = await _midtrans_snap_token(order_id, input, amount_idr)
+        else:
+            amount_usd = BOOK_PRICES_USD.get(input.format, BOOK_PRICES_USD["Hardcover"])
+            payment_data = await _stripe_checkout_session(order_id, input, amount_usd)
+            await db.orders.update_one(
+                {"id": order_id},
+                {"$set": {"payment_session_id": payment_data["session_id"]}},
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("Payment session creation failed for order %s", order_id)
+        await db.orders.delete_one({"id": order_id})
+        raise HTTPException(502, "Could not start checkout. Please try again.")
+
+    return {**order, "gateway": gateway, **payment_data}
 
 
 @api_router.get("/orders")
@@ -431,6 +526,79 @@ async def update_order(order_id: str, input: OrderStatusUpdate):
     if not result.matched_count:
         raise HTTPException(404, "Order not found")
     return {"id": order_id, "status": input.status}
+
+
+# ---------- Stripe webhook (Flow B) ----------
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    try:
+        event = await stripe_checkout.handle_webhook(body, sig)
+    except Exception:
+        logging.exception("Stripe webhook handling error")
+        raise HTTPException(400, "Invalid webhook payload")
+
+    if event.payment_status == "paid":
+        order_id = (event.metadata or {}).get("order_id", "")
+        if order_id:
+            await db.orders.update_one(
+                {"id": order_id, "payment_status": {"$ne": "paid"}},
+                {"$set": {
+                    "payment_status": "paid",
+                    "payment_session_id": event.session_id,
+                    "status": "Order received",
+                }},
+            )
+    return {"status": "ok"}
+
+
+# ---------- Midtrans notification ----------
+@api_router.post("/payments/midtrans/notification")
+async def midtrans_notification(request: Request):
+    n = await request.json()
+
+    # Validate signature: sha512(order_id + status_code + gross_amount + server_key)
+    raw = f"{n.get('order_id')}{n.get('status_code')}{n.get('gross_amount')}{MIDTRANS_SERVER_KEY}"
+    expected = hashlib.sha512(raw.encode()).hexdigest()
+    if not hmac.compare_digest(expected, n.get("signature_key", "")):
+        raise HTTPException(403, "Invalid notification signature")
+
+    order_id = n.get("order_id", "")
+    txn_status = n.get("transaction_status", "")
+    fraud_status = (n.get("fraud_status") or "").lower()
+
+    if txn_status == "settlement" or (txn_status == "capture" and fraud_status in ("", "accept")):
+        new_status = "paid"
+    elif txn_status == "pending":
+        new_status = "pending"
+    elif txn_status in ("cancel", "deny", "expire"):
+        new_status = "failed"
+    else:
+        new_status = "pending"
+
+    # Only advance status (paid/failed cannot be downgraded to pending)
+    RANK = {"pending": 0, "paid": 10, "failed": 10}
+    order = await db.orders.find_one({"id": order_id}, {"payment_status": 1})
+    if order and RANK.get(new_status, 0) >= RANK.get(order.get("payment_status", "pending"), 0):
+        await db.orders.update_one(
+            {"id": order_id},
+            {"$set": {"payment_status": new_status}},
+        )
+    return {"status": "ok"}
+
+
+# ---------- Payment status polling ----------
+@api_router.get("/payments/status/{order_id}")
+async def get_payment_status(order_id: str):
+    order = await db.orders.find_one(
+        {"id": order_id},
+        {"_id": 0, "id": 1, "payment_status": 1, "status": 1, "payment_gateway": 1},
+    )
+    if not order:
+        raise HTTPException(404, "Order not found")
+    return order
 
 
 @api_router.post("/status", response_model=StatusCheck)

@@ -6,8 +6,27 @@ import axios from "axios";
 import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, CircleHelp, CloudUpload, Crown, Heart, Languages, LayoutDashboard, Package, Pause, Play, Sparkles, Volume2, VolumeX, WandSparkles } from "lucide-react";
 import { copy, languages, useLanguage } from "@/i18n";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const MIDTRANS_CLIENT_KEY = process.env.REACT_APP_MIDTRANS_CLIENT_KEY || "";
+const MIDTRANS_IS_PRODUCTION = process.env.REACT_APP_MIDTRANS_IS_PRODUCTION === "true";
+const BOOK_PRICES = { Hardcover: { usd: "$34.00", idr: "Rp 549.000" }, Softcover: { usd: "$22.00", idr: "Rp 359.000" } };
+const COUNTRIES = ["Australia", "Canada", "Germany", "Indonesia", "Malaysia", "Netherlands", "New Zealand", "Philippines", "Singapore", "United Kingdom", "United States", "Other"];
+
+function loadMidtransSnap() {
+  return new Promise((resolve, reject) => {
+    if (window.snap) { resolve(window.snap); return; }
+    const existing = document.getElementById("midtrans-snap-js");
+    if (existing) { existing.onload = () => resolve(window.snap); return; }
+    const s = document.createElement("script");
+    s.id = "midtrans-snap-js";
+    s.src = MIDTRANS_IS_PRODUCTION ? "https://app.midtrans.com/snap/snap.js" : "https://app.sandbox.midtrans.com/snap/snap.js";
+    s.setAttribute("data-client-key", MIDTRANS_CLIENT_KEY);
+    s.onload = () => resolve(window.snap);
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND}/api`;
 const resolveImage = src => (src && src.startsWith("/api/") ? `${BACKEND}${src}` : src);
 const themes = [{ name: "Moonlit Forest", id: "Hutan Cahaya Bulan", icon: "✦", color: "lavender" }, { name: "Ocean Explorer", id: "Penjelajah Laut", icon: "≈", color: "blue" }, { name: "Dinosaur Valley", id: "Lembah Dinosaurus", icon: "◈", color: "coral" }];
 const storyLanguages = [{ code: "en", label: "English", flag: "🇬🇧" }, { code: "id", label: "Bahasa Indonesia", flag: "🇮🇩" }];
@@ -152,7 +171,152 @@ function Storybook() {
   </main></Shell>;
 }
 
-function Checkout() { const { text } = useLanguage(); const [params] = useSearchParams(); const [done, setDone] = useState(false); const [error, setError] = useState(""); const [format, setFormat] = useState("Hardcover"); const [form, setForm] = useState({ customer_name: "", email: "", address: "", city: "", postal_code: "", payment_method: "Stripe" }); const update = event => setForm({ ...form, [event.target.name]: event.target.value }); const submit = async event => { event.preventDefault(); setError(""); try { await axios.post(`${API}/orders`, { ...form, story_id: params.get("story_id") || "demo", child_name: params.get("child_name") || "Story friend", format, gift_box: false }); setDone(true); } catch (_) { setError(text.orderError); } }; if (done) return <Shell><div className="center-page"><div className="success-icon"><Check /></div><div className="eyebrow">{text.confirmed}</div><h1>{text.onWayA}<br /><em>{text.onWayB}</em></h1><p className="center-sub">{text.confirmedDescription}</p><Link to="/dashboard" className="btn btn-primary" data-testid="track-order-button">{text.track} <ArrowRight size={17} /></Link></div></Shell>; return <Shell><main className="checkout"><div className="checkout-title"><Link to="/dashboard" className="back-link" data-testid="back-storybook-link"><ChevronLeft size={17} /> {text.checkoutBack}</Link><h1>{text.checkoutTitleA} <em>{text.checkoutTitleB}</em></h1><p>{text.checkoutDescription}</p></div><form className="checkout-form" onSubmit={submit}>{error && <div className="error-message" role="alert" data-testid="checkout-error-message">{error}</div>}<div className="format-row"><h3>{text.cover}</h3><div className="format-options">{[["Hardcover", "$34.00", "★★★★★"], ["Softcover", "$22.00", "★★★★☆"]].map(([name, price, stars]) => <button type="button" onClick={() => setFormat(name)} className={`format-option ${format === name ? "chosen" : ""}`} key={name} data-testid={`format-${name.toLowerCase()}-option`}><span className="cover-icon">▣</span><b>{name === "Hardcover" ? text.hardcover : text.softcover}</b><small>{stars} · {price}</small>{format === name && <Check size={16} />}</button>)}</div></div><div className="field-section"><h3>{text.send}</h3><div className="two-col"><input name="customer_name" placeholder={text.fullName} required onChange={update} data-testid="shipping-name-input" /><input name="email" type="email" placeholder={text.email} required onChange={update} data-testid="shipping-email-input" /></div><input name="address" placeholder={text.address} required onChange={update} data-testid="shipping-address-input" /><div className="two-col"><input name="city" placeholder={text.city} required onChange={update} data-testid="shipping-city-input" /><input name="postal_code" placeholder={text.postal} required onChange={update} data-testid="shipping-postal-input" /></div></div><div className="payment-note"><Crown size={18} /><span><b>{text.secure}</b><small>{text.paymentHint}</small></span><span className="payment-brand">stripe</span></div><button className="btn btn-coral full" data-testid="place-order-button">{text.placeOrder} · {format === "Hardcover" ? "$34.00" : "$22.00"} <ArrowRight size={17} /></button></form></main></Shell>; }
+function Checkout() {
+  const { text } = useLanguage();
+  const [params] = useSearchParams();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [format, setFormat] = useState("Hardcover");
+  const [country, setCountry] = useState("Other");
+  const [form, setForm] = useState({ customer_name: "", email: "", address: "", city: "", postal_code: "" });
+  const update = e => setForm({ ...form, [e.target.name]: e.target.value });
+  const isIndonesia = country === "Indonesia";
+  const price = BOOK_PRICES[format] || BOOK_PRICES.Hardcover;
+  const displayPrice = isIndonesia ? price.idr : price.usd;
+
+  const submit = async e => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const payload = {
+        ...form,
+        story_id: params.get("story_id") || "demo",
+        child_name: params.get("child_name") || "Story friend",
+        format,
+        gift_box: false,
+        country,
+        origin_url: window.location.origin,
+      };
+      const { data } = await axios.post(`${API}/orders`, payload, { timeout: 20000 });
+
+      if (data.gateway === "stripe") {
+        window.location.href = data.checkout_url;
+      } else if (data.gateway === "midtrans") {
+        const snap = await loadMidtransSnap();
+        setLoading(false);
+        snap.pay(data.snap_token, {
+          onSuccess: () => { window.location.href = `/checkout/success?order_id=${data.id}`; },
+          onPending: () => { window.location.href = `/checkout/success?order_id=${data.id}&pending=1`; },
+          onError: () => setError(text.orderError),
+          onClose: () => setError(""),
+        });
+      }
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setError(detail || text.orderError);
+      setLoading(false);
+    }
+  };
+
+  return <Shell><main className="checkout">
+    <div className="checkout-title">
+      <Link to="/dashboard" className="back-link" data-testid="back-storybook-link"><ChevronLeft size={17} /> {text.checkoutBack}</Link>
+      <h1>{text.checkoutTitleA} <em>{text.checkoutTitleB}</em></h1>
+      <p>{text.checkoutDescription}</p>
+    </div>
+    <form className="checkout-form" onSubmit={submit}>
+      {error && <div className="error-message" role="alert" data-testid="checkout-error-message">{error}</div>}
+      <div className="format-row">
+        <h3>{text.cover}</h3>
+        <div className="format-options">
+          {[["Hardcover", "★★★★★"], ["Softcover", "★★★★☆"]].map(([name, stars]) => {
+            const p = BOOK_PRICES[name];
+            const pr = isIndonesia ? p.idr : p.usd;
+            return <button type="button" onClick={() => setFormat(name)} className={`format-option ${format === name ? "chosen" : ""}`} key={name} data-testid={`format-${name.toLowerCase()}-option`}>
+              <span className="cover-icon">▣</span>
+              <b>{name === "Hardcover" ? text.hardcover : text.softcover}</b>
+              <small>{stars} · {pr}</small>
+              {format === name && <Check size={16} />}
+            </button>;
+          })}
+        </div>
+      </div>
+      <div className="field-section">
+        <h3>{text.send}</h3>
+        <div className="two-col">
+          <input name="customer_name" placeholder={text.fullName} required onChange={update} data-testid="shipping-name-input" />
+          <input name="email" type="email" placeholder={text.email} required onChange={update} data-testid="shipping-email-input" />
+        </div>
+        <input name="address" placeholder={text.address} required onChange={update} data-testid="shipping-address-input" />
+        <div className="two-col">
+          <input name="city" placeholder={text.city} required onChange={update} data-testid="shipping-city-input" />
+          <input name="postal_code" placeholder={text.postal} required onChange={update} data-testid="shipping-postal-input" />
+        </div>
+        <select value={country} onChange={e => setCountry(e.target.value)} required data-testid="shipping-country-select">
+          <option value="">{text.selectCountry}</option>
+          {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <div className="payment-note">
+        <Crown size={18} />
+        <span><b>{text.secure}</b><small>{text.paymentHint}</small></span>
+        <span className="payment-brand">{isIndonesia ? "midtrans" : "stripe"}</span>
+      </div>
+      <button className="btn btn-coral full" disabled={loading || !country} data-testid="place-order-button">
+        {loading ? <><span className="spinner" /> {text.paymentProcessing}</> : <>{text.placeOrder} · {displayPrice} <ArrowRight size={17} /></>}
+      </button>
+    </form>
+  </main></Shell>;
+}
+
+function CheckoutSuccess() {
+  const { text } = useLanguage();
+  const [params] = useSearchParams();
+  const orderId = params.get("order_id");
+  const isPending = params.get("pending") === "1";
+  const [payStatus, setPayStatus] = useState(isPending ? "pending" : "checking");
+
+  useEffect(() => {
+    if (!orderId || payStatus === "paid") return;
+    const check = async () => {
+      try {
+        const { data } = await axios.get(`${API}/payments/status/${orderId}`);
+        if (data.payment_status === "paid") setPayStatus("paid");
+        else if (data.payment_status === "failed") setPayStatus("failed");
+      } catch (_) {}
+    };
+    check();
+    const timer = setInterval(check, 3000);
+    return () => clearInterval(timer);
+  }, [orderId, payStatus]);
+
+  const isPaid = payStatus === "paid";
+  const isFailed = payStatus === "failed";
+
+  return <Shell><div className="center-page" data-testid="checkout-success-page">
+    <div className={`success-icon ${isFailed ? "failed" : ""}`}>{isFailed ? "✕" : isPaid ? <Check /> : <span className="spinner" />}</div>
+    <div className="eyebrow">{isPaid ? text.confirmed : isFailed ? text.payFailedTitle : text.checkingPayment}</div>
+    <h1>{isPaid ? text.paySuccessTitle : isFailed ? text.payFailedDesc : (isPending ? text.payPendingTitle : text.checkingPayment)}</h1>
+    <p className="center-sub">{isPaid ? text.paySuccessDesc : isFailed ? text.payFailedDesc : text.payPendingDesc}</p>
+    {isPaid && <Link to="/dashboard" className="btn btn-primary" data-testid="track-order-button">{text.track} <ArrowRight size={17} /></Link>}
+    {isFailed && <Link to="/checkout" className="btn btn-coral" data-testid="retry-checkout-button">{text.payRetry} <ArrowRight size={17} /></Link>}
+    {!isPaid && !isFailed && <Link to="/" className="text-link" data-testid="back-home-link">{text.backHome}</Link>}
+  </div></Shell>;
+}
+
+function CheckoutCancel() {
+  const { text } = useLanguage();
+  const [params] = useSearchParams();
+  const orderId = params.get("order_id");
+  return <Shell><div className="center-page" data-testid="checkout-cancel-page">
+    <div className="success-icon" style={{ background: "var(--clr-coral, #f97316)" }}>✕</div>
+    <div className="eyebrow">{text.payCancelTitle}</div>
+    <h1>{text.payCancelTitle}</h1>
+    <p className="center-sub">{text.payCancelDesc}</p>
+    <Link to={orderId ? `/checkout` : "/dashboard"} className="btn btn-coral" data-testid="retry-checkout-button">{text.payRetry} <ArrowRight size={17} /></Link>
+  </div></Shell>;
+}
 
 function Dashboard() { const { text } = useLanguage(); const [stories, setStories] = useState([]); const [orders, setOrders] = useState([]); useEffect(() => { Promise.all([axios.get(`${API}/stories`), axios.get(`${API}/orders`)]).then(([storiesResponse, ordersResponse]) => { setStories(storiesResponse.data); setOrders(ordersResponse.data); }); }, []); return <Shell><main className="dashboard"><div className="dashboard-head"><div><div className="eyebrow"><Heart size={14} /> {text.dashEyebrow}</div><h1>{text.welcomeA} <em>{text.welcomeB}</em></h1></div><Link to="/create" className="btn btn-primary" data-testid="dashboard-create-book-button">{text.createAnother} <Sparkles size={16} /></Link></div><section className="dash-section"><div className="section-heading"><h2>{text.stories}</h2><span>{stories.length || 0} {text.saved}</span></div><div className="library-grid">{stories.length ? stories.map(story => <Link to={`/storybook/${story.id}`} className="story-card" key={story.id} data-testid={`story-card-${story.id}`}><img src={resolveImage(story.cover_image || (story.pages && story.pages[0] && story.pages[0].image))} alt="Story cover" /><div><b>{story.title}</b><small>{text.created} · {languageLabel(themes.find(theme => theme.name === story.theme) || themes[0])}</small></div><ArrowRight size={16} /></Link>) : <div className="empty-state"><BookOpen size={28} /><b>{text.firstWaiting}</b><span>{text.firstDescription}</span><Link to="/create" className="text-link" data-testid="empty-create-book-link">{text.startCreating} <ArrowRight size={14} /></Link></div>}</div></section><section className="dash-section"><div className="section-heading"><h2>{text.printOrders}</h2><span>{orders.length || 0} {text.ordersCount}</span></div>{orders.length ? orders.map(order => <div className="order-row" key={order.id} data-testid={`order-row-${order.id}`}><span className="order-icon"><Package size={18} /></span><div><b>{order.format === "Hardcover" ? text.hardcover : text.softcover} storybook</b><small>{order.status} · {order.city}</small></div><span className="status-pill">{order.status}</span></div>) : <div className="empty-order">{text.noOrders}</div>}</section></main></Shell>; }
 
@@ -165,5 +329,5 @@ function Admin() {
   return <Shell><main className="dashboard"><div className="dashboard-head"><div><div className="eyebrow"><Package size={14} /> {text.adminEyebrow}</div><h1>{text.printA} <em>{text.printB}</em></h1></div><span className="admin-badge">{text.adminView}</span></div><div className="metric-row"><div><span>{text.incoming}</span><b>{orders.length}</b></div><div><span>{text.production}</span><b>{orders.filter(order => order.status === "In production").length}</b></div><div><span>{text.shipped}</span><b>{orders.filter(order => order.status === "Shipped").length}</b></div></div><section className="orders-table"><div className="table-head"><span>{text.customer}</span><span>{text.book}</span><span>{text.orders}</span></div>{orders.length ? orders.map(order => <div className="table-row" key={order.id} data-testid={`admin-order-${order.id}`}><div><b>{order.customer_name}</b><small>{order.email}</small></div><span>{order.format === "Hardcover" ? text.hardcover : text.softcover}</span><select value={order.status} onChange={event => change(order, event.target.value)} data-testid={`order-status-${order.id}`}><option value="Order received">{statusLabels.received}</option><option value="In production">{statusLabels.production}</option><option value="Shipped">{statusLabels.shipped}</option></select></div>) : <div className="empty-order">{text.newOrders}</div>}</section></main></Shell>;
 }
 
-function App() { return <div className="App"><BrowserRouter><Routes><Route path="/" element={<Home />} /><Route path="/create" element={<Create />} /><Route path="/storybook/:id" element={<Storybook />} /><Route path="/checkout" element={<Checkout />} /><Route path="/dashboard" element={<Dashboard />} /><Route path="/admin" element={<Admin />} /></Routes></BrowserRouter></div>; }
+function App() { return <div className="App"><BrowserRouter><Routes><Route path="/" element={<Home />} /><Route path="/create" element={<Create />} /><Route path="/storybook/:id" element={<Storybook />} /><Route path="/checkout" element={<Checkout />} /><Route path="/checkout/success" element={<CheckoutSuccess />} /><Route path="/checkout/cancel" element={<CheckoutCancel />} /><Route path="/dashboard" element={<Dashboard />} /><Route path="/admin" element={<Admin />} /></Routes></BrowserRouter></div>; }
 export default App;

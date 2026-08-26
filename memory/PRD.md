@@ -15,47 +15,46 @@ high-quality physical printed copy.
 - Onboarding wizard: name, age, personality, photo, theme, story language.
 - Real AI: text via LLM, illustrations via image-gen using the child's photo as reference.
 - Digital flipbook viewer with page navigation.
-- Print checkout: format (Hardcover/Softcover), shipping details.
+- Print checkout: format (Hardcover/Softcover), shipping details, real payment.
 - User dashboard: past stories + order status.
 - Admin panel: incoming orders, update production/shipping status.
 - Bilingual UI + story text: English (default), Bahasa Indonesia.
 
 ## What's implemented (as of 2026-02)
-- Full React + FastAPI + MongoDB stack (Feb 2026).
-- Landing / create wizard / digital flipbook / mocked checkout / dashboard / admin — done.
+- Full React + FastAPI + MongoDB stack.
+- Landing / create wizard / digital flipbook / real checkout / dashboard / admin — done.
 - Bilingual UI (English + Bahasa Indonesia) — done.
-- **Real AI wired**: Gemini 3 Flash (32-page story text) + Gemini Nano Banana
-  (8 illustrations, child photo used as reference for character likeness),
+- **Real AI wired**: Gemini Flash (story text) + Gemini Nano Banana (illustrations),
   via `emergentintegrations` + `EMERGENT_LLM_KEY`.
-- Illustrations saved to disk under `/app/backend/generated_images/` and served via
-  `/api/images/*` static mount (keeps Mongo documents small).
-- Local pastel placeholder image served when an illustration call fails.
-- Partial-failure signal: story includes `illustrations_generated` /
-  `illustrations_expected` and `status: "ready" | "partial"`.
-- Generic client error message (no upstream billing text leaked).
-- **Read-aloud narrator** (OpenAI TTS, voice "nova") generated per page at
-  creation time, saved to `/app/backend/generated_audio/` and served via
-  `/api/audio/*` static mount. Storybook viewer has a "Read aloud" unlock
-  button (browser autoplay gate), auto-play on page change, auto-advance on
-  audio end, plus play/pause and mute controls. Story doc carries
-  `narrations_generated` / `narrations_expected` / `narrator_voice`.
-- A seeded `narrator-demo-01` story exists so the narration UI can be demoed
-  even when the Gemini text budget is exhausted.
-- Stripe checkout — **MOCKED** (order is stored but no real payment session).
+- Illustrations saved to disk under `/app/backend/generated_images/` served via `/api/images/*`.
+- Narration audio saved to `/app/backend/generated_audio/` served via `/api/audio/*`.
+- Read-aloud narrator (OpenAI TTS, voice "nova") per page, auto-play + auto-advance.
+- "Sample Peek" auto-cycling demo on landing page (narrator-demo-01 story).
+- **Dual payment gateway (LIVE)**:
+  - **Stripe** (Flow B, `sk_test_emergent`): for all non-Indonesia countries.
+    Redirect to hosted Stripe Checkout. Webhook at `/api/webhook/stripe`.
+  - **Midtrans** (production VT- keys): for Indonesia customers.
+    Snap popup. Notification at `/api/payments/midtrans/notification`.
+  - Country detected by dropdown in checkout form.
+  - Prices: Hardcover $34 / Rp 549,000; Softcover $22 / Rp 359,000.
+  - Payment status polling: `GET /api/payments/status/{order_id}`.
+  - Success page at `/checkout/success`, Cancel page at `/checkout/cancel`.
 
 ## Backlog (prioritized)
-- **P0** — Enable real Stripe test-mode checkout (`/api/orders` → Stripe session +
-  webhook, replacing current mock).
+- **P0** — Enable Google AI billing so image generation via `GEMINI_API_KEY` works
+  (text already works; image gen quota is 0 on free tier).
 - **P1** — Parent Accounts / auth so stories & orders tie to a logged-in user.
-- **P1** — Story generation as async job with polling (avoid ingress timeouts
-  during peak load; today it's a 25–60s synchronous request).
-- **P2** — Read-aloud / TTS narration per page.
-- **P2** — More unique illustrations per book (16 / 32) once budget / speed allow.
-- **P2** — Refactor `App.js` into per-route page components.
+- **P1** — Story generation as async job with polling (avoid ingress timeouts).
+- **P2** — Refactor `App.js` monolith into `/pages/` directory structure.
+- **P2** — More unique illustrations per book (16 / 32) once budget allows.
+- **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
+- **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
 
 ## Known constraints / notes
-- Story generation is synchronous and takes 25–60 s. Frontend sets a 180 s timeout.
-- 32 pages of text, 8 unique illustrations (each shared across 4 pages) — deliberate
-  trade-off for cost & latency.
-- Requires `EMERGENT_LLM_KEY` in `/app/backend/.env`; user needs enough balance —
-  budget-exhausted errors surface as a friendly 502 message.
+- Story generation is synchronous, 25–60 s. Frontend sets 180 s timeout.
+- 24 pages of text, 8 unique illustrations (each shared across 3 pages).
+- Google AI image generation blocked on free tier (0 quota). Text works.
+  Use EMERGENT_LLM_KEY for images via emergentintegrations.
+- Stripe uses `sk_test_emergent` (Emergent proxy). User needs to claim their
+  sandbox via the Payments tab to go live.
+- Midtrans uses production VT- keys — fully live for Indonesian customers.
