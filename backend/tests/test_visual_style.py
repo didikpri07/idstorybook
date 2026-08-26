@@ -4,7 +4,7 @@ import requests
 import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-SESSION_TOKEN = "test_parent_cover_998496137b44412f"
+SESSION_TOKEN = os.environ.get("TEST_PARENT_TOKEN_COVER", "")
 
 
 @pytest.fixture

@@ -746,6 +746,7 @@ async def create_order(input: OrderCreate, request: Request):
     }
     await db.orders.insert_one({**order})
 
+    payment_data: dict = {}
     try:
         if is_indonesia:
             amount_idr = BOOK_PRICES_IDR.get(input.format, BOOK_PRICES_IDR["Hardcover"])

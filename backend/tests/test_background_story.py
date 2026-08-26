@@ -5,7 +5,7 @@ import os
 import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-TOKEN = "test_session_fresh_2a000bb7046b4c57"
+TOKEN = os.environ.get("TEST_PARENT_TOKEN", "")
 
 headers = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 

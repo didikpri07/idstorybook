@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv('/app/frontend/.env')
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-TOKEN = "test_session_953a56775d6c4d5f9d08205b77377974"
+TOKEN = os.environ.get("TEST_PARENT_TOKEN_AUTH", "")
 
 
 class TestAuthMe:

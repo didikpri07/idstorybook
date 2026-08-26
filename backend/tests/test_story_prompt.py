@@ -4,7 +4,7 @@ import requests
 import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-AUTH_TOKEN = "test_session_fresh_2a000bb7046b4c57"
+AUTH_TOKEN = os.environ.get("TEST_PARENT_TOKEN", "")
 
 HEADERS = {"Authorization": f"Bearer {AUTH_TOKEN}", "Content-Type": "application/json"}
 

@@ -70,7 +70,7 @@ class TestHealth:
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["message"] == "Kids Storybook API"
-        assert data["ai_enabled"] is True
+        assert data["ai_enabled"] == True
 
 
 # ---------- GET /api/stories (new projection) ----------
@@ -307,7 +307,7 @@ class TestOrders:
         assert isinstance(order["id"], str) and order["id"]
         assert order["status"] == "Order received"
         assert order["format"] == "Softcover"
-        assert order["gift_box"] is True
+        assert order["gift_box"] == True
         assert order["email"] == order_payload["email"]
         assert order["created_at"]
         assert "_id" not in order

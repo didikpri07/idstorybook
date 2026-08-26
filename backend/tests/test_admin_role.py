@@ -4,8 +4,8 @@ import requests
 import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-ADMIN_TOKEN = "test_admin_session_796f04c2ff7440ce"
-PARENT_TOKEN = "test_parent_session_6552febd138c4713"
+ADMIN_TOKEN = os.environ.get("TEST_ADMIN_TOKEN", "")
+PARENT_TOKEN = os.environ.get("TEST_PARENT_TOKEN_ROLE", "")
 
 
 def admin_headers():

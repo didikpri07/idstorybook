@@ -362,7 +362,7 @@ function Create() {
         const { data } = await axios.get(`${API}/stories/${processingId}`);
         if (data.status === "completed" && active) setPreview(processingId);
         else if (data.status === "failed" && active) { setError(text.createError); setProcessingId(null); setElapsed(0); }
-      } catch {}
+      } catch (err) { console.error("Story status poll failed:", err); }
     };
     const pollTimer = setInterval(poll, 3000);
     poll();
@@ -630,7 +630,7 @@ function CheckoutSuccess() {
         const { data } = await axios.get(`${API}/payments/status/${orderId}`);
         if (data.payment_status === "paid") setPayStatus("paid");
         else if (data.payment_status === "failed") setPayStatus("failed");
-      } catch (_) {}
+      } catch (err) { console.error("Payment status check failed:", err); }
     };
     check();
     const timer = setInterval(check, 3000);
@@ -674,7 +674,7 @@ function Dashboard() {
     Promise.all([
       axios.get(`${API}/stories`, { withCredentials: true }),
       axios.get(`${API}/orders`, { withCredentials: true }),
-    ]).then(([sr, or]) => { setStories(sr.data); setOrders(or.data); }).catch(() => {});
+    ]).then(([sr, or]) => { setStories(sr.data); setOrders(or.data); }).catch(err => console.error("Dashboard load failed:", err));
   }, []);
 
   return <Shell><main className="dashboard">
@@ -710,7 +710,7 @@ function Admin() {
   const { text, language } = useLanguage();
   const [orders, setOrders] = useState([]);
   // Admin calls /api/admin/orders with auth cookie (same-origin)
-  useEffect(() => { axios.get(`${API}/admin/orders`, { withCredentials: true }).then(response => setOrders(response.data)).catch(() => {}); }, []);
+  useEffect(() => { axios.get(`${API}/admin/orders`, { withCredentials: true }).then(response => setOrders(response.data)).catch(err => console.error("Admin orders load failed:", err)); }, []);
   const change = async (order, status) => { await axios.patch(`${API}/orders/${order.id}`, { status }, { withCredentials: true }); setOrders(orders.map(item => item.id === order.id ? { ...item, status } : item)); };
   const statusLabels = language === "id" ? { received: "Pesanan diterima", production: "Dalam produksi", shipped: "Dikirim" } : { received: "Order received", production: "In production", shipped: "Shipped" };
   return <Shell><main className="dashboard">
