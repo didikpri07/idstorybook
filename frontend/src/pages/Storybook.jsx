@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowRight, BookOpen, Box, ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, Link2, Pause, Play, Share2, Volume2, VolumeX } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
@@ -15,7 +15,19 @@ export default function Storybook() {
   const [unlocked, setUnlocked] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [copied, setCopied] = useState(false);
   const audioRef = useRef(null);
+
+  const shareStory = async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      try { await navigator.share({ title: story?.title, text: `Read "${story?.title}" — a personalized storybook!`, url }); } catch {}
+    } else {
+      await navigator.clipboard.writeText(url).catch(() => {});
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
 
   useEffect(() => {
     axios.get(`${API}/stories/${id}`)
@@ -80,7 +92,18 @@ export default function Storybook() {
         <div className="reader-head">
           <Link to="/dashboard" className="back-link" data-testid="back-library-link"><ChevronLeft size={17} /> {text.backLibrary}</Link>
           <span className="reader-title"><BookOpen size={16} /> {story.title}</span>
-          <Link to={`/checkout?story_id=${story.id}&child_name=${encodeURIComponent(story.child_name)}`} className="btn btn-coral" data-testid="order-physical-book-button">{text.orderPhysical} <Box size={16} /></Link>
+          <div className="reader-head-actions">
+            <button
+              type="button"
+              className={`btn btn-share ${copied ? "btn-share--copied" : ""}`}
+              onClick={shareStory}
+              data-testid="share-story-button"
+              aria-label={text.shareStory}
+            >
+              {copied ? <><Check size={15} /> {text.linkCopied}</> : <><Share2 size={15} /> {text.shareStory}</>}
+            </button>
+            <Link to={`/checkout?story_id=${story.id}&child_name=${encodeURIComponent(story.child_name)}`} className="btn btn-coral" data-testid="order-physical-book-button">{text.orderPhysical} <Box size={16} /></Link>
+          </div>
         </div>
         <div className="book">
           <div className="book-image">

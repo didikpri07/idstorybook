@@ -60,6 +60,12 @@
 .style-card small{font-size:9px;color:var(--muted)}
 @media(max-width:520px){.style-picker{grid-template-columns:repeat(2,1fr)}}
 
+/* ---------- Share button ---------- */
+.reader-head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-share{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:8px;font-size:13px;font-weight:600;border:1.5px solid var(--purple);color:var(--purple);background:#fff;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
+.btn-share:hover{background:var(--lav)}
+.btn-share--copied{border-color:#239f71;color:#239f71;background:#edfaf4;pointer-events:none}
+
 /* ---------- Story prompt textarea ---------- */
 .story-prompt-field{gap:4px}
 .story-prompt-wrap{position:relative;display:flex;flex-direction:column}
