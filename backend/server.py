@@ -100,8 +100,8 @@ class OrderStatusUpdate(BaseModel):
 
 
 # ---------- Config ----------
-PAGES_PER_BOOK = 32
-ILLUSTRATION_COUNT = 8  # unique illustrations, each shared across 4 consecutive pages
+PAGES_PER_BOOK = 24
+ILLUSTRATION_COUNT = 8  # unique illustrations, each shared across PAGES_PER_ILLUSTRATION pages
 PAGES_PER_ILLUSTRATION = PAGES_PER_BOOK // ILLUSTRATION_COUNT
 
 TEXT_MODEL_PROVIDER = "gemini"
@@ -145,7 +145,7 @@ def _parse_json_from_text(text: str) -> dict:
 async def generate_story_text(
     child_name: str, age: int, gender: str, theme: str, language: str
 ) -> dict:
-    """Generate a 32-page storybook with title and 8 illustration prompts using Gemini."""
+    """Generate a personalized storybook with title and illustration prompts using Gemini."""
     lang_name = "Bahasa Indonesia" if language == "id" else "English"
     system_msg = (
         "You are a beloved children's storybook author. You write warm, age-appropriate, "
