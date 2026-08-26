@@ -287,7 +287,7 @@ function Home() {
     </div>
     <div className="hero-art">
       <div className="sun" />
-      <div className="art-label">{text.heroLabel} <b>{text.heroLabelBold}</b></div>
+      <div className="art-label">A story starring your little one</div>
       <img src="https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85" alt="Whimsical storybook scene" data-testid="hero-image" />
       <div className="floating-note note-one">✦ <b>{text.madeWonder}</b></div>
       <div className="floating-note note-two">☼ {text.printed}</div>
@@ -295,7 +295,7 @@ function Home() {
   </main>
   <SamplePeek />
   <section className="theme-strip">
-    <div><span className="section-kicker">{text.pickChapter}</span><h2>{text.whereGo}</h2></div>
+    <div><span className="section-kicker">Pick Their Story World</span><h2>{text.whereGo}</h2></div>
     <div className="theme-cards">
       {themes.map(theme => <div className={`theme-card ${theme.color}`} key={theme.name} data-testid={`theme-card-${theme.name.toLowerCase().replaceAll(" ", "-")}`}><span>{theme.icon}</span><b>{languageLabel(theme)}</b><small>{text.buildStory}</small></div>)}
     </div>
