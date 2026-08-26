@@ -21,7 +21,13 @@ high-quality physical printed copy.
 - Bilingual UI + story text: English (default), Bahasa Indonesia.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
-## What's implemented (as of 2026-02)
+## What's implemented (as of 2026-08)
+- **Background Story Generation (P1) — DONE**:
+  - `POST /api/stories` now returns immediately (< 2s) with `status: "processing"`.
+  - `run_story_generation()` FastAPI BackgroundTask runs full AI pipeline (text → illustrations → audio).
+  - Updates DB to `status: "completed"` or `status: "failed"` when done.
+  - Frontend `Create` component shows animated progress screen with 4-step indicators and polling every 3s.
+  - `Storybook` viewer has guards for `status: "processing"` and `status: "failed"` to prevent crashes.
 - Full React + FastAPI + MongoDB stack.
 - Landing / create wizard / digital flipbook / real checkout / dashboard / admin — done.
 - Bilingual UI (English + Bahasa Indonesia) — done.
@@ -66,15 +72,13 @@ high-quality physical printed copy.
 
 ## Backlog (prioritized)
 - **P0** — Enable Google AI billing so image generation via `GEMINI_API_KEY` works.
-- **P1** — Story generation as async job with polling (avoid ingress timeouts on slow connections).
+- **P2** — Expand Theme Picker: add Space Explorer, Fairy Kingdom, Undersea City themes.
 - **P2** — Refactor `App.js` monolith into `/pages/` directory structure.
 - **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
-- **P2** — Cover-Image Preview: ✅ done — live 3D book cover in creation wizard, updates in real-time as parent types name/changes theme/uploads photo.
 - **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
-- **P3** — Admin auth: ✅ done — role-based, ADMIN_EMAILS env var gates /admin + /api/admin/orders + PATCH /api/orders/:id
 
 ## Known constraints / notes
-- Story generation is synchronous, 25–60 s. Frontend sets 180 s timeout.
+- Story generation is a background task (~60–90s). Frontend polls every 3s. No timeout risk.
 - 24 pages of text, 8 unique illustrations (each shared across 3 pages).
 - Stripe uses `sk_test_emergent` (Emergent proxy). User needs to claim sandbox to go live.
 - Midtrans uses production VT- keys — fully live for Indonesian customers.

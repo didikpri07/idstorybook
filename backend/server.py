@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -72,6 +72,34 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').sp
 BOOK_PRICES_USD = {"Hardcover": 34.0, "Softcover": 22.0}
 BOOK_PRICES_IDR = {"Hardcover": 549000, "Softcover": 359000}
 
+# Visual style → AI illustration prompt descriptor
+STYLE_PROMPTS = {
+    "Classic Watercolor": (
+        "Soft watercolor storybook illustration, hand-painted texture, gentle brushstrokes, "
+        "warm pastel palette, delicate translucent color washes, traditional children's picture book art."
+    ),
+    "3D Animation": (
+        "Vibrant 3D animated film still, smooth rounded surfaces, soft subsurface scattering, "
+        "cinematic studio lighting, rich saturated colors, Pixar or Illumination movie quality CGI for children."
+    ),
+    "Comic Book": (
+        "Dynamic comic book illustration, bold clean black outlines, vibrant flat cel-shaded colors, "
+        "expressive cartoon characters, halftone dot print aesthetic, Marvel Kids panel style, no speech bubbles."
+    ),
+    "Claymation": (
+        "Stop-motion claymation scene, textured polymer clay surfaces, visible handmade fingerprint texture, "
+        "vivid saturated colors, charming imperfections, Aardman Animations Wallace and Gromit aesthetic."
+    ),
+    "Pencil Sketch": (
+        "Detailed pencil sketch illustration, fine cross-hatching shading, warm sepia and graphite tones, "
+        "hand-drawn expressive line art, classic Quentin Blake or E.H. Shepard children's book style."
+    ),
+    "Oil Painting": (
+        "Rich oil painting illustration, thick impasto brushstrokes, deep jewel-tone colors, "
+        "painterly layered texture, dramatic warm lighting, classic storybook art nouveau aesthetic."
+    ),
+}
+
 # Create the main app without a prefix
 app = FastAPI()
 
@@ -96,6 +124,7 @@ class StoryCreate(BaseModel):
     age: int
     gender: str
     theme: str
+    visual_style: str = "Classic Watercolor"
     photo_base64: Optional[str] = None  # data URL or raw base64
     story_language: str = "en"
 
@@ -296,12 +325,12 @@ async def generate_illustration(
     age: int,
     photo_b64: Optional[str],
     idx: int,
+    visual_style: str = "Classic Watercolor",
 ) -> Optional[str]:
     """Generate one illustration: Google AI Pro first, Emergent LLM Key as fallback."""
-    style = (
-        "Soft watercolor children's storybook illustration, warm pastel palette, "
-        "gentle lighting, whimsical, hand-painted texture, cheerful and safe for kids."
-    )
+    style = STYLE_PROMPTS.get(visual_style, STYLE_PROMPTS["Classic Watercolor"])
+    # Append universal children's book safety guard
+    style += " Cheerful and safe for kids."
     reference_note = (
         " Draw the main child character as an illustrated storybook version of the child in "
         "the reference photo, keeping recognisable features like hair color/style and skin tone. "
@@ -529,38 +558,25 @@ async def _stripe_checkout_session(order_id: str, input: OrderCreate, amount_usd
     return {"checkout_url": session.url, "session_id": session.session_id}
 
 
-# ---------- Routes ----------
-@api_router.get("/")
-async def root():
-    return {"message": "Kids Storybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
+# ---------- Background generation ----------
 
-@api_router.post("/stories")
-async def create_story(input: StoryCreate, request: Request):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "EMERGENT_LLM_KEY not configured on the server")
-    user = await get_optional_user(request)
-
-    photo_b64 = _strip_data_url(input.photo_base64)
-
+async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Optional[str]):
+    """Background task: run full AI generation pipeline and update the story document when done."""
     try:
         story_data = await generate_story_text(
             input.child_name, input.age, input.gender, input.theme, input.story_language
         )
-    except Exception as e:  # noqa: BLE001
-        logging.exception("Story text generation failed")
-        message = str(e)
-        if "budget" in message.lower() or "quota" in message.lower():
-            # 402 Payment Required — 5xx codes are swallowed by the ingress HTML page
-            raise HTTPException(
-                402,
-                "AI credit budget exceeded. Please top up your Emergent LLM key balance.",
-            ) from e
-        raise HTTPException(
-            503,
-            "Story generation is temporarily unavailable. Please try again shortly.",
-        ) from e
+    except Exception as e:
+        logging.exception("Background story text generation failed for %s", story_id)
+        err_msg = str(e)
+        if "budget" in err_msg.lower() or "quota" in err_msg.lower():
+            err_msg = "AI credit budget exceeded. Please top up your Emergent LLM key balance."
+        await db.stories.update_one(
+            {"id": story_id},
+            {"$set": {"status": "failed", "error": err_msg[:500]}}
+        )
+        return
 
-    # Generate all illustrations in parallel (small enough set to be safe)
     illustration_tasks = [
         generate_illustration(
             scene_prompt=prompt,
@@ -568,6 +584,7 @@ async def create_story(input: StoryCreate, request: Request):
             age=input.age,
             photo_b64=photo_b64,
             idx=i,
+            visual_style=input.visual_style,
         )
         for i, prompt in enumerate(story_data["illustration_prompts"])
     ]
@@ -575,7 +592,6 @@ async def create_story(input: StoryCreate, request: Request):
     illustrations_generated = sum(1 for img in illustrations_raw if img)
     illustrations = [img or PLACEHOLDER_IMAGE for img in illustrations_raw]
 
-    # Generate narration audio for every page in parallel (batched to be nice to the API)
     async def _batched_narration(texts: List[str]) -> List[Optional[str]]:
         batch_size = 8
         results: List[Optional[str]] = []
@@ -590,7 +606,6 @@ async def create_story(input: StoryCreate, request: Request):
     audio_paths = await _batched_narration(page_texts)
     narrations_generated = sum(1 for a in audio_paths if a)
 
-    # Map each page to its illustration (every PAGES_PER_ILLUSTRATION pages share one)
     pages = []
     for i, page in enumerate(story_data["pages"]):
         illus_idx = min(i // PAGES_PER_ILLUSTRATION, len(illustrations) - 1)
@@ -601,7 +616,36 @@ async def create_story(input: StoryCreate, request: Request):
             "audio": audio_paths[i],
         })
 
+    await db.stories.update_one(
+        {"id": story_id},
+        {"$set": {
+            "title": story_data["title"],
+            "pages": pages,
+            "cover_image": illustrations[0],
+            "illustrations_generated": illustrations_generated,
+            "illustrations_expected": ILLUSTRATION_COUNT,
+            "narrations_generated": narrations_generated,
+            "narrations_expected": len(page_texts),
+            "status": "completed",
+        }}
+    )
+    logging.info("Background story generation completed for %s", story_id)
+
+
+# ---------- Routes ----------
+@api_router.get("/")
+async def root():
+    return {"message": "Kids Storybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
+
+@api_router.post("/stories")
+async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, request: Request):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "EMERGENT_LLM_KEY not configured on the server")
+    user = await get_optional_user(request)
+
+    photo_b64 = _strip_data_url(input.photo_base64)
     story_id = str(uuid.uuid4())
+
     story = {
         "id": story_id,
         "user_id": user["user_id"] if user else None,
@@ -609,20 +653,17 @@ async def create_story(input: StoryCreate, request: Request):
         "age": input.age,
         "gender": input.gender,
         "theme": input.theme,
+        "visual_style": input.visual_style,
         "story_language": input.story_language,
-        "title": story_data["title"],
-        "pages": pages,
-        "cover_image": illustrations[0],
+        "title": f"{input.child_name}'s Story",
+        "pages": [],
+        "cover_image": PLACEHOLDER_IMAGE,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "illustrations_generated": illustrations_generated,
-        "illustrations_expected": ILLUSTRATION_COUNT,
-        "narrations_generated": narrations_generated,
-        "narrations_expected": len(page_texts),
         "narrator_voice": TTS_VOICE,
-        "status": "ready" if illustrations_generated == ILLUSTRATION_COUNT else "partial",
+        "status": "processing",
     }
     await db.stories.insert_one({**story})
-    # Return without the heavy pages payload duplicated (still returns full)
+    background_tasks.add_task(run_story_generation, story_id, input, photo_b64)
     return story
 
 

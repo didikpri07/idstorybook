@@ -11,6 +11,15 @@ const MIDTRANS_CLIENT_KEY = process.env.REACT_APP_MIDTRANS_CLIENT_KEY || "";
 const MIDTRANS_IS_PRODUCTION = process.env.REACT_APP_MIDTRANS_IS_PRODUCTION === "true";
 const BOOK_PRICES = { Hardcover: { usd: "$34.00", idr: "Rp 549.000" }, Softcover: { usd: "$22.00", idr: "Rp 359.000" } };
 const COUNTRIES = ["Australia", "Canada", "Germany", "Indonesia", "Malaysia", "Netherlands", "New Zealand", "Philippines", "Singapore", "United Kingdom", "United States", "Other"];
+
+const VISUAL_STYLES = [
+  { id: "Classic Watercolor", icon: "◌", preview: "linear-gradient(135deg,#f3e8ff 0%,#e8f4f8 50%,#fff8e8 100%)", desc: "Soft & dreamy" },
+  { id: "3D Animation",        icon: "◉", preview: "linear-gradient(135deg,#dbeafe 0%,#bfdbfe 50%,#e0f2fe 100%)", desc: "Bright & playful" },
+  { id: "Comic Book",          icon: "▣", preview: "linear-gradient(135deg,#fef3c7 0%,#fde68a 50%,#fecaca 100%)", desc: "Bold & expressive" },
+  { id: "Claymation",          icon: "◆", preview: "linear-gradient(135deg,#d1fae5 0%,#a7f3d0 50%,#ecfdf5 100%)", desc: "Tactile & fun" },
+  { id: "Pencil Sketch",       icon: "⊘", preview: "linear-gradient(135deg,#f5f5f4 0%,#e7e5e4 50%,#fafaf9 100%)", desc: "Classic & timeless" },
+  { id: "Oil Painting",        icon: "◈", preview: "linear-gradient(135deg,#fdf4ff 0%,#fce7f3 50%,#fff1f2 100%)", desc: "Rich & textured" },
+];
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND}/api`;
 const resolveImage = src => (src && src.startsWith("/api/") ? `${BACKEND}${src}` : src);
@@ -24,7 +33,25 @@ const COVER_THEMES = {
   "Dinosaur Valley": { bg: "linear-gradient(155deg,#14532d 0%,#15803d 55%,#713f12 100%)", spine: "#0a321b", accent: "#86efac", star: "◈", emoji: "🦕" },
 };
 
-function CoverPreview({ childName, theme, photoBase64 }) {
+function StylePicker({ value, onChange }) {
+  return (
+    <div className="style-picker" data-testid="style-picker">
+      {VISUAL_STYLES.map(s => (
+        <button type="button" key={s.id}
+          className={`style-card ${value === s.id ? "chosen" : ""}`}
+          onClick={() => onChange(s.id)}
+          data-testid={`style-card-${s.id.toLowerCase().replace(/\s+/g, "-")}`}
+        >
+          <div className="style-swatch" style={{ background: s.preview }}>{s.icon}</div>
+          <b>{s.id}</b>
+          <small>{s.desc}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CoverPreview({ childName, theme, photoBase64, visualStyle }) {
   const t = COVER_THEMES[theme] || COVER_THEMES["Moonlit Forest"];
   const name = childName?.trim() || "Your Child";
   return (
@@ -40,7 +67,7 @@ function CoverPreview({ childName, theme, photoBase64 }) {
             : <div className="cover-photo-ring cover-photo-empty" style={{ borderColor: t.accent, color: t.accent }}><User size={28} /></div>
           }
           <div className="cover-child-name" style={{ color: t.accent }} data-testid="cover-child-name">{name}</div>
-          <div className="cover-tagline">& the {theme}</div>
+          <div className="cover-tagline">{visualStyle || "Classic Watercolor"}</div>
           <div className="cover-brand-label">Kids Storybook</div>
         </div>
       </div>
@@ -304,32 +331,79 @@ function Home() {
 
 function Create() {
   const { language, text } = useLanguage();
-  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", photo_base64: "", story_language: "en" });
+  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en" });
   const [photoName, setPhotoName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState("");
+  const [processingId, setProcessingId] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  const PROGRESS_STEPS = [
+    { label: language === "id" ? `Menulis cerita untuk ${form.child_name || "si kecil"}\u2026` : `Writing a story for ${form.child_name || "your little one"}\u2026`, icon: "\u2726" },
+    { label: language === "id" ? "Melukis ilustrasi cerita\u2026" : "Painting story illustrations\u2026", icon: "\u25c9" },
+    { label: language === "id" ? "Merekam narasi cerita\u2026" : "Recording the narration\u2026", icon: "\u266a" },
+    { label: language === "id" ? "Sentuhan akhir\u2026" : "Adding the final touches\u2026", icon: "\u25c6" },
+  ];
+  const stepIndex = elapsed < 20 ? 0 : elapsed < 50 ? 1 : elapsed < 70 ? 2 : 3;
+  const progress = Math.min(92, (elapsed / 80) * 100);
+
   const update = event => setForm({ ...form, [event.target.name]: event.target.value });
   const readAsDataUrl = file => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
   const onPhoto = async event => { const file = event.target.files?.[0]; if (!file) return; setPhotoName(file.name); const dataUrl = await readAsDataUrl(file); setForm(previous => ({ ...previous, photo_base64: dataUrl })); };
+
+  useEffect(() => {
+    if (!processingId) return;
+    let active = true;
+    const elapsedTimer = setInterval(() => setElapsed(e => e + 1), 1000);
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const { data } = await axios.get(`${API}/stories/${processingId}`);
+        if (data.status === "completed" && active) setPreview(processingId);
+        else if (data.status === "failed" && active) { setError(text.createError); setProcessingId(null); setElapsed(0); }
+      } catch {}
+    };
+    const pollTimer = setInterval(poll, 3000);
+    poll();
+    return () => { active = false; clearInterval(elapsedTimer); clearInterval(pollTimer); };
+  }, [processingId, text.createError]);
+
   const submit = async event => {
     event.preventDefault(); setLoading(true); setError("");
     try {
-      const response = await axios.post(`${API}/stories`, form, { timeout: 180000, withCredentials: true });
-      setPreview(response.data.id);
+      const response = await axios.post(`${API}/stories`, form, { timeout: 30000, withCredentials: true });
+      setProcessingId(response.data.id);
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setError(detail || text.createError);
     } finally { setLoading(false); }
   };
+
   if (preview) return <Shell><div className="center-page"><div className="success-icon"><Check /></div><div className="eyebrow">{text.ready}</div><h1>{text.meet} {form.child_name}'s<br /><em>{text.adventure}</em></h1><p className="center-sub">{text.readyDescription} {form.child_name}.</p><Link to={`/storybook/${preview}`} className="btn btn-primary" data-testid="open-storybook-button">{text.openStory} <ArrowRight size={17} /></Link></div></Shell>;
+
+  if (processingId) {
+    const step = PROGRESS_STEPS[stepIndex];
+    return <Shell><div className="center-page generating-page" data-testid="generating-page">
+      <div className="generating-icon-wrap"><div className="generating-book-pulse"><BookOpen size={32} /></div></div>
+      <div className="eyebrow" data-testid="generating-step-label">{step.icon} {step.label}</div>
+      <h1>{language === "id" ? "Membuat buku cerita" : "Creating"} <em>{form.child_name}</em>{language === "id" ? "\u2026" : "'s storybook\u2026"}</h1>
+      <div className="generating-progress-track"><div className="generating-progress-fill" style={{ width: `${progress}%` }} data-testid="generating-progress-bar" /></div>
+      <p className="center-sub" style={{ marginBottom: 32 }}>{elapsed}s &middot; {language === "id" ? "Biasanya 60\u201390 detik" : "Usually takes 60\u201390 seconds"}</p>
+      <div className="generating-steps-list">
+        {PROGRESS_STEPS.map((s, i) => <div key={i} className={`generating-step-item ${i < stepIndex ? "step-done" : i === stepIndex ? "step-active" : "step-pending"}`} data-testid={`generating-step-${i}`}><span className="step-icon">{i < stepIndex ? <Check size={13} /> : s.icon}</span><span>{s.label}</span></div>)}
+      </div>
+      {error && <div className="error-message" role="alert" style={{ marginTop: 24 }} data-testid="create-error-message">{error}</div>}
+    </div></Shell>;
+  }
+
   return <Shell><main className="create-layout">
     <div className="create-intro">
       <div className="eyebrow"><WandSparkles size={15} /> {text.createEyebrow}</div>
       <h1>{text.createTitleA}<br /><em>{text.createTitleB}</em></h1>
       <p>{text.createDescription}</p>
       <div className="steps"><span className="active">01</span><i /><span>02</span><i /><span>03</span></div>
-      <CoverPreview childName={form.child_name} theme={form.theme} photoBase64={form.photo_base64} />
+      <CoverPreview childName={form.child_name} theme={form.theme} photoBase64={form.photo_base64} visualStyle={form.visual_style} />
     </div>
     <form className="form-panel" onSubmit={submit}>
       {error && <div className="error-message" role="alert" data-testid="create-error-message">{error}</div>}
@@ -339,6 +413,10 @@ function Create() {
         <label>{text.personality}<select name="gender" value={form.gender} onChange={update} required data-testid="child-gender-select"><option value="">{text.choose}</option><option>{language === "id" ? "Pemberani" : "Adventurous"}</option><option>{language === "id" ? "Penasaran" : "Curious"}</option><option>{language === "id" ? "Imajinatif" : "Imaginative"}</option></select></label>
       </div>
       <label>{text.world}<select name="theme" value={form.theme} onChange={update} data-testid="story-theme-select">{themes.map(theme => <option key={theme.name} value={theme.name}>{language === "id" ? theme.id : theme.name}</option>)}</select></label>
+      <div className="field-block">
+        <label className="field-label">{text.visualStyle}</label>
+        <StylePicker value={form.visual_style} onChange={v => setForm(f => ({ ...f, visual_style: v }))} />
+      </div>
       <label className="upload">{text.photo}
         <div className="upload-box"><CloudUpload size={24} /><span><b>{photoName || text.dropPhoto}</b> {!photoName && text.browse}</span><small>{text.photoHint}</small></div>
         <input type="file" accept="image/*" data-testid="child-photo-input" onChange={onPhoto} />
@@ -378,6 +456,8 @@ function Storybook() {
 
   if (error) return <Shell><div className="center-page"><div className="error-message" role="alert" data-testid="storybook-error-message">{error}</div></div></Shell>;
   if (!story) return <Shell><div className="center-page"><span className="spinner" /><p>{text.storyLoading}</p></div></Shell>;
+  if (story.status === "processing" || !story.pages || !story.pages.length) return <Shell><div className="center-page" data-testid="story-processing-page"><div className="generating-icon-wrap"><div className="generating-book-pulse"><BookOpen size={32} /></div></div><div className="eyebrow">{text.storyLoading}</div><h1>Your storybook is<br /><em>being made…</em></h1><p className="center-sub">This usually takes 60–90 seconds. Come back shortly!</p><Link to="/dashboard" className="btn btn-primary" data-testid="back-library-link">{text.backLibrary} <ArrowRight size={17} /></Link></div></Shell>;
+  if (story.status === "failed") return <Shell><div className="center-page"><div className="success-icon" style={{ background: "#fff0e7", color: "#ff776e" }}>!</div><h1>Something went <em>wrong</em></h1><p className="center-sub">Story generation failed. Please try creating a new one.</p><Link to="/create" className="btn btn-primary" data-testid="create-book-button">{text.createBook} <ArrowRight size={17} /></Link></div></Shell>;
 
   const current = story.pages[page];
   const isLast = page === story.pages.length - 1;
