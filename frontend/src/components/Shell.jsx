@@ -73,7 +73,7 @@ export function Shell({ children }) {
         </Link>
         <nav>
           <Link to="/dashboard" data-testid="nav-dashboard"><LayoutDashboard size={16} /> {text.library}</Link>
-          <Link to="/admin" data-testid="nav-admin"><Package size={16} /> {text.orders}</Link>
+          <Link to="/dashboard#orders" data-testid="nav-orders"><Package size={16} /> {text.orders}</Link>
         </nav>
         <div className="topbar-right">
           <LanguagePanel language={language} setLanguage={setLanguage} text={text} />

@@ -60,7 +60,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="orders-section">
+        <section className="orders-section" id="orders">
           <h2>{text.printOrders}</h2>
           {orders.length ? orders.map(order => (
             <div className="order-row" key={order.id} data-testid={`order-row-${order.id}`}>
