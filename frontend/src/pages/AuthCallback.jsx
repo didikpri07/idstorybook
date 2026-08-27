@@ -27,7 +27,7 @@ export default function AuthCallback() {
   return (
     <div className="login-page">
       <div className="auth-card">
-        <div className="auth-brand"><span className="auth-brand-mark"><BookOpen size={18} /></span>Kids <b style={{ color: "var(--purple)" }}>Storybook</b></div>
+        <div className="auth-brand"><span className="auth-brand-mark"><BookOpen size={18} /></span>ID<b style={{ color: "var(--purple)" }}>Storybook</b></div>
         <span className="spinner" style={{ border: "2px solid #e2e0ee", borderTopColor: "var(--purple)", width: 36, height: 36, margin: "16px auto" }} />
         <p>Signing you in…</p>
       </div>

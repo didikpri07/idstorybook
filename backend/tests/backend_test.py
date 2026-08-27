@@ -69,7 +69,7 @@ class TestHealth:
         r = api_client.get(f"{BASE_URL}/api/", timeout=30)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["message"] == "Kids Storybook API"
+        assert data["message"] == "IDStorybook API"
         assert data["ai_enabled"] == True
 
 

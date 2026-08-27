@@ -16,7 +16,7 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="auth-card" data-testid="login-card">
-        <div className="auth-brand"><span className="auth-brand-mark"><BookOpen size={18} /></span>Kids <b style={{ color: "var(--purple)" }}>Storybook</b></div>
+        <div className="auth-brand"><span className="auth-brand-mark"><BookOpen size={18} /></span>ID<b style={{ color: "var(--purple)" }}>Storybook</b></div>
         <h1>Welcome back</h1>
         <p>Sign in to create stories, view your little library, and track your printed books.</p>
         <button className="btn-google" onClick={handleGoogleLogin} data-testid="google-signin-button">

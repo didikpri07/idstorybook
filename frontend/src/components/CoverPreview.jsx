@@ -18,7 +18,7 @@ export function CoverPreview({ childName, theme, photoBase64, visualStyle }) {
           }
           <div className="cover-child-name" style={{ color: t.accent }} data-testid="cover-child-name">{name}</div>
           <div className="cover-tagline">{visualStyle || "Classic Watercolor"}</div>
-          <div className="cover-brand-label">Kids Storybook</div>
+          <div className="cover-brand-label">IDStorybook</div>
         </div>
       </div>
       <p className="cover-caption">Live cover preview · updates as you type</p>

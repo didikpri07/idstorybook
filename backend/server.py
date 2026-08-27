@@ -530,7 +530,7 @@ async def auth_logout(request: Request, response: Response):
 
 async def _midtrans_snap_token(order_id: str, input: OrderCreate, amount_idr: int) -> dict:
     """Create a Midtrans Snap transaction and return token + redirect_url."""
-    item_name = f"Kids Storybook – {input.format} ({input.child_name})"[:50]
+    item_name = f"IDStorybook – {input.format} ({input.child_name})"[:50]
     payload = {
         "transaction_details": {"order_id": order_id, "gross_amount": amount_idr},
         "customer_details": {"first_name": input.customer_name, "email": input.email},
@@ -650,7 +650,7 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
 # ---------- Routes ----------
 @api_router.get("/")
 async def root():
-    return {"message": "Kids Storybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
+    return {"message": "IDStorybook API", "ai_enabled": bool(EMERGENT_LLM_KEY)}
 
 @api_router.post("/stories")
 async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, request: Request):

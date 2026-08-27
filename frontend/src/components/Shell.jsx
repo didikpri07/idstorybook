@@ -69,7 +69,7 @@ export function Shell({ children }) {
       <header className="topbar">
         <Link to="/" className="brand" data-testid="brand-home">
           <span className="brand-mark"><BookOpen size={19} /></span>
-          <span>Kids <b>Storybook</b></span>
+          <span>ID<b>Storybook</b></span>
         </Link>
         <nav>
           <Link to="/dashboard" data-testid="nav-dashboard"><LayoutDashboard size={16} /> {text.library}</Link>
