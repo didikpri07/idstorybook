@@ -20,7 +20,7 @@ export default function AuthCallback() {
 
     const sessionId = decodeURIComponent(match[1]);
     axios.post(`${API}/auth/session`, { session_id: sessionId }, { withCredentials: true })
-      .then(({ data }) => { setUser(data.user); navigate("/dashboard", { replace: true }); })
+      .then(({ data }) => { setUser(data.user); navigate(data.user?.role === "admin" ? "/admin" : "/dashboard", { replace: true }); })
       .catch(() => navigate("/login", { replace: true }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
