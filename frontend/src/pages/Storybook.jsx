@@ -47,11 +47,12 @@ export default function Storybook() {
       const H = doc.internal.pageSize.getHeight();
       const theme = COVER_THEMES[story.theme] || COVER_THEMES["Moonlit Forest"];
 
+      const coverData = story.cover || { title: story.title, image: story.cover_image };
+
       // --- Cover page ---
       doc.setFillColor(15, 12, 41);
       doc.rect(0, 0, W, H, "F");
-      const coverSrc = story.cover_image || story.pages[0]?.image;
-      const coverImg = await toDataUrl(coverSrc);
+      const coverImg = await toDataUrl(coverData.image || story.pages[0]?.image);
       if (coverImg) {
         doc.addImage(coverImg, imgFormat(coverImg), 0, 0, W, H * 0.62, undefined, "MEDIUM");
         // dark gradient overlay over bottom of cover image
@@ -62,7 +63,7 @@ export default function Storybook() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(20);
       doc.setTextColor(230, 220, 255);
-      const titleLines = doc.splitTextToSize(story.title, W - 20);
+      const titleLines = doc.splitTextToSize(coverData.title, W - 20);
       doc.text(titleLines, W / 2, H * 0.67, { align: "center", lineHeightFactor: 1.3 });
       // Child name
       doc.setFont("helvetica", "normal");
@@ -172,9 +173,14 @@ export default function Storybook() {
     </Shell>
   );
 
-  const current = story.pages[page];
-  const isLast = page === story.pages.length - 1;
-  const audioSrc = current.audio ? resolveImage(current.audio) : null;
+  // --- Cover + page indexing ---
+  const hasCover = Boolean(story.cover?.image);
+  const totalPages = hasCover ? 1 + story.pages.length : story.pages.length;
+  const isCoverPage = hasCover && page === 0;
+  const storyPageIdx = hasCover ? page - 1 : page;
+  const current = isCoverPage ? null : story.pages[storyPageIdx];
+  const isLast = page === totalPages - 1;
+  const audioSrc = (!isCoverPage && current?.audio) ? resolveImage(current.audio) : null;
 
   const startReading = async () => {
     setUnlocked(true);
@@ -187,8 +193,8 @@ export default function Storybook() {
     if (el.paused) { try { await el.play(); setPlaying(true); } catch { setPlaying(false); } }
     else { el.pause(); setPlaying(false); }
   };
-  const toggleMute = () => { setMuted(previous => { const next = !previous; if (audioRef.current) audioRef.current.muted = next; return next; }); };
-  const onEnded = () => { setPlaying(false); if (!isLast) setPage(page + 1); };
+  const toggleMute = () => { setMuted(m => { const next = !m; if (audioRef.current) audioRef.current.muted = next; return next; }); };
+  const onEnded = () => { setPlaying(false); if (!isLast) setPage(p => p + 1); };
   const goPage = next => { setPage(next); };
 
   return (
@@ -196,57 +202,64 @@ export default function Storybook() {
       <main className="reader">
         <div className="reader-head">
           <Link to="/dashboard" className="back-link" data-testid="back-library-link"><ChevronLeft size={17} /> {text.backLibrary}</Link>
-          <span className="reader-title"><BookOpen size={16} /> {story.title}</span>
+          <span className="reader-title"><BookOpen size={16} /> {story.cover?.title || story.title}</span>
           <div className="reader-head-actions">
-            <button
-              type="button"
-              className={`btn btn-share ${copied ? "btn-share--copied" : ""}`}
-              onClick={shareStory}
-              data-testid="share-story-button"
-              aria-label={text.shareStory}
-            >
+            <button type="button" className={`btn btn-share ${copied ? "btn-share--copied" : ""}`} onClick={shareStory} data-testid="share-story-button" aria-label={text.shareStory}>
               {copied ? <><Check size={15} /> {text.linkCopied}</> : <><Share2 size={15} /> {text.shareStory}</>}
             </button>
-            <button
-              type="button"
-              className={`btn btn-download ${generatingPdf ? "btn-download--busy" : ""}`}
-              onClick={downloadPdf}
-              disabled={generatingPdf}
-              data-testid="download-pdf-button"
-              aria-label={text.downloadPdf}
-            >
-              {generatingPdf
-                ? <><span className="spinner spinner-sm" /> {text.generatingPdf}</>
-                : <><FileDown size={15} /> {text.downloadPdf}</>}
+            <button type="button" className={`btn btn-download ${generatingPdf ? "btn-download--busy" : ""}`} onClick={downloadPdf} disabled={generatingPdf} data-testid="download-pdf-button" aria-label={text.downloadPdf}>
+              {generatingPdf ? <><span className="spinner spinner-sm" /> {text.generatingPdf}</> : <><FileDown size={15} /> {text.downloadPdf}</>}
             </button>
             <Link to={`/checkout?story_id=${story.id}&child_name=${encodeURIComponent(story.child_name)}`} className="btn btn-coral" data-testid="order-physical-book-button">{text.orderPhysical} <Box size={16} /></Link>
           </div>
         </div>
-        <div className="book">
-          <div className="book-image">
-            <img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration" />
-            <span className="page-number">{page + 1} / {story.pages.length}</span>
-          </div>
-          <div className="book-text">
-            <span className="page-kicker">{text.chapter} {page + 1}</span>
-            <p data-testid="storybook-page-text">{current.text}</p>
-            {audioSrc ? <audio ref={audioRef} src={audioSrc} preload="auto" onEnded={onEnded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} data-testid="narrator-audio" /> : null}
-            <div className="narrator-controls" data-testid="narrator-controls">
-              {!unlocked && audioSrc ? <button type="button" className="btn btn-primary btn-sm narrator-start" onClick={startReading} data-testid="start-read-aloud-button"><Play size={16} /> {text.readAloud}</button> : null}
-              {unlocked && audioSrc ? <>
-                <button type="button" className="icon-btn" onClick={togglePlay} aria-label={playing ? text.stopReading : text.readAloud} data-testid="toggle-play-button">{playing ? <Pause size={18} /> : <Play size={18} />}</button>
-                <button type="button" className="icon-btn" onClick={toggleMute} aria-label={muted ? text.unmuteNarrator : text.muteNarrator} data-testid="toggle-mute-button">{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
-                <small className="narrator-hint" data-testid="narrator-hint">{playing ? "◆ " + text.readAloud : text.readAloud}</small>
-              </> : null}
-              {!audioSrc ? <small className="narrator-hint" data-testid="narrator-missing">{text.narrationUnavailable}</small> : null}
+
+        {isCoverPage ? (
+          <div className="book book--cover-view" data-testid="storybook-cover-page">
+            <div className="cover-page-full">
+              <img src={resolveImage(story.cover.image)} alt="Story cover" className="cover-page-img" data-testid="cover-illustration" />
+              <div className="cover-page-overlay">
+                <span className="cover-page-tag">{text.storyFor}</span>
+                <h2 className="cover-page-title" data-testid="cover-title">{story.cover.title}</h2>
+                <p className="cover-page-name">{story.child_name}</p>
+                <small className="cover-page-brand">IDStorybook</small>
+              </div>
             </div>
-            <div className="reader-controls">
-              <button aria-label={text.previous} onClick={() => goPage(Math.max(0, page - 1))} disabled={!page} data-testid="previous-page-button"><ChevronLeft /></button>
-              <div className="dots">{story.pages.map((_, index) => <span className={index === page ? "selected" : ""} key={index} />)}</div>
-              <button aria-label={text.next} onClick={() => goPage(Math.min(story.pages.length - 1, page + 1))} disabled={isLast} data-testid="next-page-button"><ChevronRight /></button>
+            <div className="reader-controls reader-controls--cover">
+              <button aria-label={text.previous} onClick={() => goPage(Math.max(0, page - 1))} disabled={page === 0} data-testid="previous-page-button"><ChevronLeft /></button>
+              <div className="dots">
+                {Array.from({ length: totalPages }).map((_, i) => <span className={i === page ? "selected" : ""} key={i} />)}
+              </div>
+              <button aria-label={text.next} onClick={() => goPage(Math.min(totalPages - 1, page + 1))} disabled={isLast} data-testid="next-page-button"><ChevronRight /></button>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="book">
+            <div className="book-image">
+              <img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration" />
+              <span className="page-number">{storyPageIdx + 1} / {story.pages.length}</span>
+            </div>
+            <div className="book-text">
+              <span className="page-kicker">{text.chapter} {storyPageIdx + 1}</span>
+              <p data-testid="storybook-page-text">{current.text}</p>
+              {audioSrc ? <audio ref={audioRef} src={audioSrc} preload="auto" onEnded={onEnded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} data-testid="narrator-audio" /> : null}
+              <div className="narrator-controls" data-testid="narrator-controls">
+                {!unlocked && audioSrc ? <button type="button" className="btn btn-primary btn-sm narrator-start" onClick={startReading} data-testid="start-read-aloud-button"><Play size={16} /> {text.readAloud}</button> : null}
+                {unlocked && audioSrc ? <>
+                  <button type="button" className="icon-btn" onClick={togglePlay} aria-label={playing ? text.stopReading : text.readAloud} data-testid="toggle-play-button">{playing ? <Pause size={18} /> : <Play size={18} />}</button>
+                  <button type="button" className="icon-btn" onClick={toggleMute} aria-label={muted ? text.unmuteNarrator : text.muteNarrator} data-testid="toggle-mute-button">{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+                  <small className="narrator-hint" data-testid="narrator-hint">{playing ? "◆ " + text.readAloud : text.readAloud}</small>
+                </> : null}
+                {!audioSrc ? <small className="narrator-hint" data-testid="narrator-missing">{text.narrationUnavailable}</small> : null}
+              </div>
+              <div className="reader-controls">
+                <button aria-label={text.previous} onClick={() => goPage(Math.max(0, page - 1))} disabled={page === 0} data-testid="previous-page-button"><ChevronLeft /></button>
+                <div className="dots">{Array.from({ length: totalPages }).map((_, i) => <span className={i === page ? "selected" : ""} key={i} />)}</div>
+                <button aria-label={text.next} onClick={() => goPage(Math.min(totalPages - 1, page + 1))} disabled={isLast} data-testid="next-page-button"><ChevronRight /></button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </Shell>
   );

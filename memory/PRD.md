@@ -21,7 +21,15 @@ high-quality physical printed copy.
 - Bilingual UI + story text: English (default), Bahasa Indonesia.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
-## What's implemented (as of 2026-08)
+## What's implemented (as of 2026-08-25)
+- **Dedicated Cover Page (2026-08-25) — DONE & TESTED**:
+  - Backend `run_story_generation()` generates a unique AI cover: `cover_title` (poetic, story-specific) + `cover_prompt` (cinematic full-page illustration prompt), both produced by the LLM alongside story text.
+  - Cover illustration generated in parallel with story illustrations (no extra latency). Saved as `story.cover = {title, image}` in MongoDB.
+  - Frontend `Storybook.jsx` shows cover as page 0 (`hasCover = Boolean(story.cover?.image)`), full-bleed image with gradient overlay, poetic title, child name, and brand footer.
+  - PDF download opens with the cover page (dark background + illustration + title). Story pages follow as pages 1–N.
+  - All 12 acceptance criteria verified by testing agent (iteration_20).
+
+
 - **Story Idea / Custom Prompt (2026-08) — DONE**:
   - Optional `story_prompt` textarea in the create form (300 char limit, live counter).
   - Positioned between theme picker and visual style picker.
@@ -78,7 +86,6 @@ high-quality physical printed copy.
 ## Backlog (prioritized)
 - **P0** — Enable Google AI billing so image generation via `GEMINI_API_KEY` works.
 - **P2** — Expand Theme Picker: add Space Explorer, Fairy Kingdom, Undersea City themes.
-- **P2** — Refactor `App.js` monolith into `/pages/` directory structure.
 - **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
 - **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
 

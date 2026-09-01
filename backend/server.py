@@ -232,6 +232,8 @@ Requirements:
 
 Return ONLY a JSON object exactly like:
 {{
+  "cover_title": "A unique, poetic title specific to THIS story — evocative and imaginative (e.g. 'Lila and the Lantern Forest' or 'The Night Kai Saved the Stars'). Never a generic title like '{child_name}\\'s Adventure'.",
+  "cover_prompt": "A single cinematic, full-page illustration prompt (2–3 English sentences) for the book cover. Capture the emotional peak or most magical moment of the story. Rich atmosphere, vivid lighting, sense of wonder. Do NOT describe the child's face.",
   "title": "...",
   "illustration_prompts": ["scene 1", "scene 2", ..., "scene {ILLUSTRATION_COUNT}"],
   "pages": [
@@ -592,7 +594,20 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
         )
         return
 
-    illustration_tasks = [
+    # Extract cover data from LLM response (with sensible fallbacks)
+    cover_title = (story_data.get("cover_title") or story_data["title"]).strip()
+    cover_prompt_text = (story_data.get("cover_prompt") or story_data["illustration_prompts"][0]).strip()
+
+    # Generate cover illustration + all story illustrations in one parallel batch
+    cover_task = generate_illustration(
+        scene_prompt=cover_prompt_text,
+        theme=input.theme,
+        age=input.age,
+        photo_b64=photo_b64,
+        idx=ILLUSTRATION_COUNT,      # unique idx so filename doesn't clash
+        visual_style=input.visual_style,
+    )
+    illustration_tasks = [cover_task] + [
         generate_illustration(
             scene_prompt=prompt,
             theme=input.theme,
@@ -603,7 +618,9 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
         )
         for i, prompt in enumerate(story_data["illustration_prompts"])
     ]
-    illustrations_raw = await asyncio.gather(*illustration_tasks)
+    all_results = await asyncio.gather(*illustration_tasks)
+    cover_img = all_results[0] or PLACEHOLDER_IMAGE
+    illustrations_raw = all_results[1:]
     illustrations_generated = sum(1 for img in illustrations_raw if img)
     illustrations = [img or PLACEHOLDER_IMAGE for img in illustrations_raw]
 
@@ -635,8 +652,12 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
         {"id": story_id},
         {"$set": {
             "title": story_data["title"],
+            "cover": {
+                "title": cover_title,
+                "image": cover_img,
+            },
             "pages": pages,
-            "cover_image": illustrations[0],
+            "cover_image": cover_img,
             "illustrations_generated": illustrations_generated,
             "illustrations_expected": ILLUSTRATION_COUNT,
             "narrations_generated": narrations_generated,
