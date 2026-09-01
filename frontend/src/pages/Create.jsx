@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, BookOpen, Check, CloudUpload, WandSparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Check, CloudUpload, SmilePlus, Sun, User, WandSparkles } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
@@ -141,9 +141,28 @@ export default function Create() {
             <StylePicker value={form.visual_style} onChange={v => setForm(f => ({ ...f, visual_style: v }))} />
           </div>
           <label className="upload">{text.photo}
-            <div className="upload-box"><CloudUpload size={24} /><span><b>{photoName || text.dropPhoto}</b> {!photoName && text.browse}</span><small>{text.photoHint}</small></div>
+            <div className={`upload-box${form.photo_base64 ? " upload-box--filled" : ""}`}>
+              {form.photo_base64 ? (
+                <>
+                  <img src={form.photo_base64} alt="Selected child photo" className="photo-preview-thumb" data-testid="photo-preview-thumb" />
+                  <span className="photo-preview-name"><b>{photoName}</b></span>
+                  <small>{text.photoChangeHint}</small>
+                </>
+              ) : (
+                <>
+                  <CloudUpload size={24} />
+                  <span><b>{text.dropPhoto}</b> {text.browse}</span>
+                  <small>{text.photoHint}</small>
+                </>
+              )}
+            </div>
             <input type="file" accept="image/*" data-testid="child-photo-input" onChange={onPhoto} />
           </label>
+          <div className="photo-tips" aria-label="Photo tips">
+            <span className="photo-tip"><Sun size={10} /> {text.photoTipLight}</span>
+            <span className="photo-tip"><User size={10} /> {text.photoTipFacing}</span>
+            <span className="photo-tip"><SmilePlus size={10} /> {text.photoTipFace}</span>
+          </div>
           <div className="story-language-field">
             <label>{text.storybook}<select name="story_language" value={form.story_language} onChange={update} data-testid="storybook-language-select">{storyLanguages.map(item => <option value={item.code} key={item.code}>{item.flag} {item.label}</option>)}</select></label>
             <small>{language === "id" ? "Bahasa ini akan digunakan untuk teks buku cerita." : "This language will be used for the story text."}</small>

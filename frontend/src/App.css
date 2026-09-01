@@ -83,7 +83,14 @@
 .btn-share:hover{background:var(--lav)}
 .btn-share--copied{border-color:#239f71;color:#239f71;background:#edfaf4;pointer-events:none}
 
-/* ---------- Story prompt textarea ---------- */
+/* ---------- Photo upload enhancements ---------- */
+.upload-box--filled{border-style:solid;border-color:var(--purple);background:#faf9ff;gap:5px}
+.photo-preview-thumb{width:72px;height:72px;object-fit:cover;border-radius:50%;border:2.5px solid var(--purple);box-shadow:0 4px 14px #6658d930;flex-shrink:0}
+.photo-preview-name{font-size:12px;color:var(--ink);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.photo-tips{display:flex;gap:7px;flex-wrap:wrap;margin-top:2px}
+.photo-tip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;color:var(--muted);background:#f4f3fa;padding:4px 9px;border-radius:100px;letter-spacing:.1px}
+
+
 .story-prompt-field{gap:4px}
 .story-prompt-wrap{position:relative;display:flex;flex-direction:column}
 .story-prompt-textarea{font:14px/1.55 Outfit;color:var(--ink);background:#fff;border:1px solid #ddd9e8;border-radius:8px;padding:13px 14px;outline:none;width:100%;resize:vertical;min-height:88px;transition:border-color .2s,box-shadow .2s}

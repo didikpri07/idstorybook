@@ -30,7 +30,13 @@ high-quality physical printed copy.
   - All 12 acceptance criteria verified by testing agent (iteration_20).
 
 
-- **Story Idea / Custom Prompt (2026-08) — DONE**:
+- **Photo Quality Nudges (2026-09-01) — DONE & TESTED**:
+  - Live circular thumbnail preview inside the upload box after a photo is selected.
+  - Upload box transitions from dashed (empty) to solid purple border (`upload-box--filled`) when filled, with "Tap to change photo" hint.
+  - Three persistent photo quality tip chips below the upload box: Good lighting · Front-facing · Clear face, no shades (bilingual EN/ID).
+  - Updated photo hint text to "JPG or PNG · under 10 MB".
+
+
   - Optional `story_prompt` textarea in the create form (300 char limit, live counter).
   - Positioned between theme picker and visual style picker.
   - When provided, the LLM receives a "Parent's special story idea / direction" block, making it the heart of the story.
