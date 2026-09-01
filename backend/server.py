@@ -404,10 +404,46 @@ async def generate_illustration(
 
 
 async def generate_narration(text: str, idx: int) -> Optional[str]:
-    """Generate one page of narration via OpenAI TTS; returns served path or None."""
+    """Generate one page of narration. Primary: Google TTS (Achernar). Fallback: OpenAI TTS."""
     cleaned = _clean_for_tts(text)
     if not cleaned:
         return None
+
+    # --- Primary: Google Gemini TTS (Achernar voice) ---
+    if GEMINI_API_KEY:
+        try:
+            import wave, io
+            from google import genai
+            from google.genai import types as gtypes
+            gclient = genai.Client(api_key=GEMINI_API_KEY)
+            resp = await gclient.aio.models.generate_content(
+                model="gemini-3.1-flash-tts-preview",
+                contents=cleaned,
+                config=gtypes.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=gtypes.SpeechConfig(
+                        voice_config=gtypes.VoiceConfig(
+                            prebuilt_voice_config=gtypes.PrebuiltVoiceConfig(voice_name="Achernar")
+                        )
+                    ),
+                ),
+            )
+            pcm_bytes = resp.candidates[0].content.parts[0].inline_data.data
+            # Wrap raw L16 PCM in a proper WAV container
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)       # 16-bit
+                wf.setframerate(24000)
+                wf.writeframes(pcm_bytes)
+            filename = f"{uuid.uuid4().hex}.wav"
+            (AUDIO_DIR / filename).write_bytes(buf.getvalue())
+            logging.info("Narration %s generated via Google TTS (Achernar)", idx)
+            return f"/api/audio/{filename}"
+        except Exception as e:
+            logging.warning("Google TTS narration %s failed (%s), falling back to OpenAI TTS", idx, e)
+
+    # --- Fallback: OpenAI TTS via Emergent LLM Key ---
     try:
         tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
         audio_bytes = await tts.generate_speech(
@@ -418,10 +454,11 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
         )
         filename = f"{uuid.uuid4().hex}.mp3"
         (AUDIO_DIR / filename).write_bytes(audio_bytes)
+        logging.info("Narration %s generated via OpenAI TTS (fallback)", idx)
         return f"/api/audio/{filename}"
-    except Exception as e:  # noqa: BLE001
-        logging.exception("Narration %s failed: %s", idx, e)
-        return None
+    except Exception as e:
+        logging.exception("Narration %s failed on all providers: %s", idx, e)
+    return None
 
 
 # ---------- Auth helpers ----------
