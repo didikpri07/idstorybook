@@ -163,12 +163,16 @@ TTS_VOICE = "nova"
 
 
 def _clean_for_tts(text: str) -> str:
-    """Strip markdown/URLs so the narrator doesn't read symbols aloud."""
+    """Strip markdown/URLs and normalize punctuation so the narrator reads evenly."""
     if not text:
         return ""
     text = re.sub(r"https?://\S+", "", text)
     text = re.sub(r"[*_#>~|`]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
+    # Soften excited punctuation → calmer, more consistent narrator tone
+    text = re.sub(r"!+", ".", text)          # exclamation → period (calmer prosody)
+    text = re.sub(r"\.{2,}", ",", text)      # ellipsis → comma (brief pause, not trailing off)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 # ---------- AI Helpers ----------
@@ -296,8 +300,8 @@ async def _illustration_via_google(
     prompt: str,
     photo_b64: Optional[str],
     idx: int,
-) -> Optional[str]:
-    """Try generating one illustration via Google AI Pro (GEMINI_API_KEY)."""
+) -> Optional[bytes]:
+    """Try generating one illustration via Google AI Pro (GEMINI_API_KEY). Returns raw image bytes."""
     from google import genai
     from google.genai import types
 
@@ -325,9 +329,7 @@ async def _illustration_via_google(
             raw = part.inline_data.data
             if isinstance(raw, str):
                 raw = base64.b64decode(raw)
-            filename = f"{uuid.uuid4().hex}.png"
-            (IMAGES_DIR / filename).write_bytes(raw)
-            return f"/api/images/{filename}"
+            return raw
     return None
 
 
@@ -335,8 +337,8 @@ async def _illustration_via_emergent(
     prompt: str,
     photo_b64: Optional[str],
     idx: int,
-) -> Optional[str]:
-    """Generate one illustration via Emergent LLM Key (fallback)."""
+) -> Optional[bytes]:
+    """Generate one illustration via Emergent LLM Key (fallback). Returns raw image bytes."""
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=f"img-{uuid.uuid4()}",
@@ -351,11 +353,19 @@ async def _illustration_via_emergent(
 
     if images:
         data_b64 = images[0].get("data", "")
-        img_bytes = base64.b64decode(data_b64)
-        filename = f"{uuid.uuid4().hex}.png"
-        (IMAGES_DIR / filename).write_bytes(img_bytes)
-        return f"/api/images/{filename}"
+        return base64.b64decode(data_b64)
     return None
+
+
+def _normalize_illustration(raw_bytes: bytes, target_w: int = 1024, target_h: int = 640) -> bytes:
+    """Resize and compress illustration to a consistent landscape JPEG (~100KB vs ~900KB PNG)."""
+    from io import BytesIO
+    from PIL import ImageOps
+    img = Image.open(BytesIO(raw_bytes)).convert("RGB")
+    img = ImageOps.fit(img, (target_w, target_h), method=Image.LANCZOS)
+    buf = BytesIO()
+    img.save(buf, "JPEG", quality=82, optimize=True)
+    return buf.getvalue()
 
 
 async def generate_illustration(
@@ -366,7 +376,8 @@ async def generate_illustration(
     idx: int,
     visual_style: str = "Classic Watercolor",
 ) -> Optional[str]:
-    """Generate one illustration: Google AI Pro first, Emergent LLM Key as fallback."""
+    """Generate one illustration: Google AI Pro first, Emergent LLM Key as fallback.
+    All illustrations are normalized to 1024×640 JPEG for consistent size and fast loading."""
     style = STYLE_PROMPTS.get(visual_style, STYLE_PROMPTS["Classic Watercolor"])
     # Append universal children's book safety guard
     style += " Cheerful and safe for kids."
@@ -382,25 +393,39 @@ async def generate_illustration(
         "Full illustration, no text, no letters, no watermarks. Landscape composition."
     )
 
+    raw_bytes: Optional[bytes] = None
+
     # --- Primary: Google AI Pro ---
     if GEMINI_API_KEY:
         try:
-            result = await _illustration_via_google(prompt, photo_b64, idx)
-            if result:
+            raw_bytes = await _illustration_via_google(prompt, photo_b64, idx)
+            if raw_bytes:
                 logging.info("Illustration %s generated via Google AI Pro", idx)
-                return result
         except Exception as e:
             logging.warning("Google AI illustration %s failed (%s), using Emergent fallback", idx, e)
 
     # --- Fallback: Emergent LLM Key ---
+    if not raw_bytes:
+        try:
+            raw_bytes = await _illustration_via_emergent(prompt, photo_b64, idx)
+            if raw_bytes:
+                logging.info("Illustration %s generated via Emergent LLM", idx)
+        except Exception as e:
+            logging.exception("Emergent illustration %s also failed: %s", idx, e)
+
+    if not raw_bytes:
+        return None
+
+    # Normalize to consistent 1024×640 JPEG regardless of source dimensions
     try:
-        result = await _illustration_via_emergent(prompt, photo_b64, idx)
-        if result:
-            logging.info("Illustration %s generated via Emergent LLM", idx)
-        return result
+        normalized = _normalize_illustration(raw_bytes)
     except Exception as e:
-        logging.exception("Emergent illustration %s also failed: %s", idx, e)
-    return None
+        logging.warning("Illustration %s normalization failed (%s), saving raw bytes", idx, e)
+        normalized = raw_bytes
+
+    filename = f"{uuid.uuid4().hex}.jpg"
+    (IMAGES_DIR / filename).write_bytes(normalized)
+    return f"/api/images/{filename}"
 
 
 async def generate_narration(text: str, idx: int) -> Optional[str]:
@@ -429,6 +454,9 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
                 ),
             )
             pcm_bytes = resp.candidates[0].content.parts[0].inline_data.data
+            # Guard against empty/corrupt audio
+            if not pcm_bytes or len(pcm_bytes) < 512:
+                raise ValueError(f"Google TTS returned suspiciously small audio ({len(pcm_bytes or b'')} bytes)")
             # Wrap raw L16 PCM in a proper WAV container
             buf = io.BytesIO()
             with wave.open(buf, "wb") as wf:

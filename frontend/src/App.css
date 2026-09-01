@@ -83,6 +83,10 @@
 .btn-share:hover{background:var(--lav)}
 .btn-share--copied{border-color:#239f71;color:#239f71;background:#edfaf4;pointer-events:none}
 
+/* ---------- Illustration fade-in ---------- */
+.story-illustration,.cover-page-img{animation:illustrationFadeIn .55s ease both}
+@keyframes illustrationFadeIn{from{opacity:0;transform:scale(1.012)}to{opacity:1;transform:scale(1)}}
+
 /* ---------- Photo upload enhancements ---------- */
 .upload-box--filled{border-style:solid;border-color:var(--purple);background:#faf9ff;gap:5px}
 .photo-preview-thumb{width:72px;height:72px;object-fit:cover;border-radius:50%;border:2.5px solid var(--purple);box-shadow:0 4px 14px #6658d930;flex-shrink:0}

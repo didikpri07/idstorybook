@@ -217,7 +217,8 @@ export default function Storybook() {
         {isCoverPage ? (
           <div className="book book--cover-view" data-testid="storybook-cover-page">
             <div className="cover-page-full">
-              <img src={resolveImage(story.cover.image)} alt="Story cover" className="cover-page-img" data-testid="cover-illustration" />
+              <img src={resolveImage(story.cover.image)} alt="Story cover" className="cover-page-img" data-testid="cover-illustration"
+                onError={e => { e.currentTarget.style.opacity = "0.15"; }} />
               <div className="cover-page-overlay">
                 <span className="cover-page-tag">{text.storyFor}</span>
                 <h2 className="cover-page-title" data-testid="cover-title">{story.cover.title}</h2>
@@ -236,7 +237,9 @@ export default function Storybook() {
         ) : (
           <div className="book">
             <div className="book-image">
-              <img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration" />
+              <img src={resolveImage(current.image)} alt="Story illustration" data-testid="storybook-illustration"
+                className="story-illustration"
+                onError={e => { e.currentTarget.src = `${BACKEND}/api/images/placeholder.png`; }} />
               <span className="page-number">{storyPageIdx + 1} / {story.pages.length}</span>
             </div>
             <div className="book-text">
