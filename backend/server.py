@@ -428,11 +428,20 @@ async def generate_illustration(
     return f"/api/images/{filename}"
 
 
-async def generate_narration(text: str, idx: int) -> Optional[str]:
-    """Generate one page of narration. Primary: Google TTS (Achernar). Fallback: OpenAI TTS."""
+async def generate_narration(text: str, idx: int, language: str = "en") -> Optional[str]:
+    """Generate one page of narration. Primary: Google TTS (Achernar). Fallback: OpenAI TTS.
+    language: 'en' or 'id' — sets the style instruction language for consistent warm tone."""
     cleaned = _clean_for_tts(text)
     if not cleaned:
         return None
+
+    # Style instruction prepended to guide tone without being narrated
+    style_instruction = (
+        "Bacakan dengan nada hangat dan ramah."
+        if language == "id"
+        else "Read aloud in a warm, welcoming tone."
+    )
+    tts_content = f"{style_instruction}\n\n{cleaned}"
 
     # --- Primary: Google Gemini TTS (Achernar voice) ---
     if GEMINI_API_KEY:
@@ -443,7 +452,7 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
             gclient = genai.Client(api_key=GEMINI_API_KEY)
             resp = await gclient.aio.models.generate_content(
                 model="gemini-3.1-flash-tts-preview",
-                contents=cleaned,
+                contents=tts_content,
                 config=gtypes.GenerateContentConfig(
                     response_modalities=["AUDIO"],
                     speech_config=gtypes.SpeechConfig(
@@ -466,12 +475,12 @@ async def generate_narration(text: str, idx: int) -> Optional[str]:
                 wf.writeframes(pcm_bytes)
             filename = f"{uuid.uuid4().hex}.wav"
             (AUDIO_DIR / filename).write_bytes(buf.getvalue())
-            logging.info("Narration %s generated via Google TTS (Achernar)", idx)
+            logging.info("Narration %s generated via Google TTS (Achernar, lang=%s)", idx, language)
             return f"/api/audio/{filename}"
         except Exception as e:
             logging.warning("Google TTS narration %s failed (%s), falling back to OpenAI TTS", idx, e)
 
-    # --- Fallback: OpenAI TTS via Emergent LLM Key ---
+    # --- Fallback: OpenAI TTS via Emergent LLM Key (uses cleaned text only, no style prefix) ---
     try:
         tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
         audio_bytes = await tts.generate_speech(
@@ -718,7 +727,7 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
         for start in range(0, len(texts), batch_size):
             batch = texts[start:start + batch_size]
             results.extend(await asyncio.gather(*[
-                generate_narration(text, start + i) for i, text in enumerate(batch)
+                generate_narration(text, start + i, input.story_language) for i, text in enumerate(batch)
             ]))
         return results
 
