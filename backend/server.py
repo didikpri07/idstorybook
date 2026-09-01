@@ -195,7 +195,8 @@ async def generate_story_text(
     child_name: str, age: int, gender: str, theme: str, language: str,
     story_prompt: Optional[str] = None,
 ) -> dict:
-    """Generate a personalized storybook with title and illustration prompts using Gemini."""
+    """Generate a personalized storybook with title and illustration prompts.
+    Primary: Google AI via GEMINI_API_KEY. Fallback: Emergent LLM Key."""
     lang_name = "Bahasa Indonesia" if language == "id" else "English"
     system_msg = (
         "You are a beloved children's storybook author. You write warm, age-appropriate, "
@@ -243,14 +244,36 @@ Return ONLY a JSON object exactly like:
   ]
 }}"""
 
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"story-{uuid.uuid4()}",
-        system_message=system_msg,
-    ).with_model(TEXT_MODEL_PROVIDER, TEXT_MODEL_NAME)
+    raw_text = None
 
-    response = await chat.send_message(UserMessage(text=user_prompt))
-    data = _parse_json_from_text(response if isinstance(response, str) else str(response))
+    # --- Primary: Google AI via GEMINI_API_KEY ---
+    if GEMINI_API_KEY:
+        try:
+            from google import genai
+            from google.genai import types as gtypes
+            gclient = genai.Client(api_key=GEMINI_API_KEY)
+            response = await gclient.aio.models.generate_content(
+                model=TEXT_MODEL_NAME,
+                contents=[user_prompt],
+                config=gtypes.GenerateContentConfig(system_instruction=system_msg),
+            )
+            raw_text = response.text
+            logging.info("Story text generated via Google AI (GEMINI_API_KEY)")
+        except Exception as e:
+            logging.warning("Google AI story text failed (%s), falling back to Emergent LLM Key", e)
+
+    # --- Fallback: Emergent LLM Key ---
+    if raw_text is None:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"story-{uuid.uuid4()}",
+            system_message=system_msg,
+        ).with_model(TEXT_MODEL_PROVIDER, TEXT_MODEL_NAME)
+        response = await chat.send_message(UserMessage(text=user_prompt))
+        raw_text = response if isinstance(response, str) else str(response)
+        logging.info("Story text generated via Emergent LLM Key (fallback)")
+
+    data = _parse_json_from_text(raw_text)
 
     if "pages" not in data or "title" not in data:
         raise ValueError("Story JSON missing required keys")
