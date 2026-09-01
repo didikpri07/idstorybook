@@ -4,7 +4,7 @@ import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, FileDown, 
 import axios from "axios";
 import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
-import { API, BACKEND, COVER_THEMES, resolveImage } from "@/lib/constants";
+import { API, BACKEND, resolveImage } from "@/lib/constants";
 
 export default function Storybook() {
   const { text } = useLanguage();
@@ -42,80 +42,132 @@ export default function Storybook() {
     setGeneratingPdf(true);
     try {
       const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
-      const W = doc.internal.pageSize.getWidth();
-      const H = doc.internal.pageSize.getHeight();
-      const theme = COVER_THEMES[story.theme] || COVER_THEMES["Moonlit Forest"];
-
+      // 1:1 square — 160×160mm
+      const SZ = 160;
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [SZ, SZ] });
+      const W = SZ, H = SZ;
       const coverData = story.cover || { title: story.title, image: story.cover_image };
 
-      // --- Cover page ---
-      doc.setFillColor(15, 12, 41);
-      doc.rect(0, 0, W, H, "F");
-      const coverImg = await toDataUrl(coverData.image || story.pages[0]?.image);
-      if (coverImg) {
-        doc.addImage(coverImg, imgFormat(coverImg), 0, 0, W, H * 0.62, undefined, "MEDIUM");
-        // dark gradient overlay over bottom of cover image
-        doc.setFillColor(15, 12, 41);
-        doc.rect(0, H * 0.52, W, H * 0.12, "F");
-      }
-      // Title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(20);
-      doc.setTextColor(230, 220, 255);
-      const titleLines = doc.splitTextToSize(coverData.title, W - 20);
-      doc.text(titleLines, W / 2, H * 0.67, { align: "center", lineHeightFactor: 1.3 });
-      // Child name
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(12);
-      doc.setTextColor(180, 165, 220);
-      doc.text(`A story for ${story.child_name}`, W / 2, H * 0.67 + titleLines.length * 8 + 5, { align: "center" });
-      // Brand footer
-      doc.setFontSize(8);
-      doc.setTextColor(100, 90, 140);
-      doc.text("IDStorybook · idstorybook.com", W / 2, H - 7, { align: "center" });
+      // Helper — fill a rectangle with a landscape (1.6:1) image, center-cropped
+      const fillRect = (dataUrl, x, y, w, h) => {
+        if (!dataUrl) return;
+        const fmt = imgFormat(dataUrl);
+        const naturalImgW = h * 1.6; // scale by height → wider than w
+        const naturalImgH = h;
+        if (naturalImgW > w) {
+          // landscape wider than target → crop sides (center)
+          doc.addImage(dataUrl, fmt, x - (naturalImgW - w) / 2, y, naturalImgW, naturalImgH, undefined, "MEDIUM");
+        } else {
+          // portrait or square → scale by width
+          const scaledH = w / 1.6;
+          doc.addImage(dataUrl, fmt, x, y - (scaledH - h) / 2, w, scaledH, undefined, "MEDIUM");
+        }
+      };
 
-      // --- Story pages ---
+      // ─────────────────── COVER PAGE ───────────────────
+      // 1. Dark deep-space background
+      doc.setFillColor(8, 5, 25);
+      doc.rect(0, 0, W, H, "F");
+
+      // 2. Full-bleed illustration — center-cropped to square
+      const coverImg = await toDataUrl(coverData.image || story.pages[0]?.image);
+      if (coverImg) fillRect(coverImg, 0, 0, W, H);
+
+      // 3. Gradient overlay — transparent → deep navy, bottom 62% of page
+      for (let i = 0; i < 32; i++) {
+        const opacity = Math.pow(i / 31, 1.4);
+        doc.setGState(new doc.GState({ opacity }));
+        doc.setFillColor(8, 5, 25);
+        const bandY = H * 0.38 + (i / 32) * H * 0.62;
+        doc.rect(0, bandY, W, (H * 0.62 / 32) + 0.5, "F");
+      }
+      doc.setGState(new doc.GState({ opacity: 1 }));
+
+      // 4. Solid bottom strip for branding
+      doc.setFillColor(8, 5, 25);
+      doc.rect(0, H - 14, W, 14, "F");
+
+      // 5. "A STORY FOR" eyebrow
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(155, 132, 205);
+      const eyebrow = story.story_language === "id" ? "SEBUAH CERITA UNTUK" : "A STORY FOR";
+      doc.text(eyebrow, W / 2, H * 0.60, { align: "center", charSpace: 2.2 });
+
+      // 6. Big cover title — 2/3 down the page, large and impactful
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(29);
+      doc.setTextColor(250, 243, 255);
+      const titleLines = doc.splitTextToSize(coverData.title, W - 12);
+      const titleY = H * 0.68;
+      doc.text(titleLines, W / 2, titleY, { align: "center", lineHeightFactor: 1.2 });
+
+      // 7. Child name beneath title
+      const nameY = titleY + titleLines.length * 9.8 + 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11.5);
+      doc.setTextColor(188, 168, 232);
+      doc.text(story.child_name, W / 2, nameY, { align: "center" });
+
+      // 8. Brand footer
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      doc.setTextColor(95, 80, 140);
+      doc.text("IDStorybook", W / 2, H - 4.5, { align: "center", charSpace: 2 });
+
+      // ─────────────────── STORY PAGES ───────────────────
+      // Image is 1024×640 (1.6:1). At full page width (160mm) → natural height = 100mm.
+      const ILLUS_H = W / 1.6; // 100mm — no distortion, no crop
+
       for (let i = 0; i < story.pages.length; i++) {
         doc.addPage();
         const p = story.pages[i];
-        const IMG_H = H * 0.56;
 
-        // White page bg
-        doc.setFillColor(252, 250, 255);
+        // Warm off-white background
+        doc.setFillColor(254, 252, 249);
         doc.rect(0, 0, W, H, "F");
 
-        // Illustration
+        // Illustration — full width, natural aspect
         const img = await toDataUrl(p.image);
         if (img) {
-          doc.addImage(img, imgFormat(img), 0, 0, W, IMG_H, undefined, "MEDIUM");
+          doc.addImage(img, imgFormat(img), 0, 0, W, ILLUS_H, undefined, "MEDIUM");
         } else {
-          doc.setFillColor(225, 218, 245);
-          doc.rect(0, 0, W, IMG_H, "F");
-          doc.setFontSize(28);
-          doc.text("✦", W / 2, IMG_H / 2 + 5, { align: "center" });
+          doc.setFillColor(232, 226, 250);
+          doc.rect(0, 0, W, ILLUS_H, "F");
+          doc.setFontSize(26);
+          doc.setTextColor(160, 140, 210);
+          doc.text("✦", W / 2, ILLUS_H / 2 + 5, { align: "center" });
         }
 
-        // Text card
-        const cardY = IMG_H + 5;
-        const cardH = H - cardY - 14;
+        // Thin shadow strip below illustration
+        doc.setGState(new doc.GState({ opacity: 0.07 }));
+        doc.setFillColor(0, 0, 0);
+        doc.rect(0, ILLUS_H, W, 3.5, "F");
+        doc.setGState(new doc.GState({ opacity: 1 }));
+
+        // White text card
+        const cardY = ILLUS_H + 2.5;
+        const cardH = H - cardY - 12;
         doc.setFillColor(255, 255, 255);
-        doc.roundedRect(8, cardY, W - 16, cardH, 3, 3, "F");
+        doc.roundedRect(7, cardY, W - 14, cardH, 3.5, 3.5, "F");
 
-        // Story text
+        // Story text — vertically centered in card
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(10.5);
-        doc.setTextColor(35, 25, 60);
-        const lines = doc.splitTextToSize(p.text, W - 28);
-        doc.text(lines, W / 2, cardY + 9, { align: "center", lineHeightFactor: 1.45 });
+        doc.setFontSize(12.5);
+        doc.setTextColor(28, 18, 52);
+        const textLines = doc.splitTextToSize(p.text, W - 26);
+        const lineH = 12.5 * 1.55 * 0.352778; // mm per line
+        const textBlockH = textLines.length * lineH;
+        const textStartY = cardY + (cardH - textBlockH) / 2 + lineH * 0.85;
+        doc.text(textLines, W / 2, textStartY, { align: "center", lineHeightFactor: 1.55 });
 
-        // Page number + brand
-        doc.setFontSize(7.5);
-        doc.setTextColor(160, 148, 190);
-        doc.text(`${i + 1} / ${story.pages.length}  ·  IDStorybook`, W / 2, H - 4, { align: "center" });
+        // Page number
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(165, 152, 195);
+        doc.text(`${i + 1}  ·  IDStorybook`, W / 2, H - 4, { align: "center" });
       }
 
-      // --- Download ---
       const filename = `${story.child_name.replace(/\s+/g, "-")}-IDStorybook.pdf`;
       doc.save(filename);
     } catch (err) {
