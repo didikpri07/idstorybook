@@ -290,7 +290,7 @@ async def _illustration_via_google(
         contents = [prompt]
 
     response = await client.aio.models.generate_content(
-        model="gemini-2.0-flash-exp",
+        model="gemini-3.1-flash-image",
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],

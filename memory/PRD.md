@@ -84,7 +84,7 @@ high-quality physical printed copy.
 - GET /api/payments/status/:order_id — poll payment status
 
 ## Backlog (prioritized)
-- **P0** — Enable Google AI billing so image generation via `GEMINI_API_KEY` works.
+- **P0** — ~~Enable Google AI billing~~ **DONE**: Updated Google AI image model from deprecated `gemini-2.0-flash-exp` to `gemini-3.1-flash-image`. Photo-referenced illustrations now generate via `GEMINI_API_KEY` as primary, with Emergent LLM Key as fallback.
 - **P2** — Expand Theme Picker: add Space Explorer, Fairy Kingdom, Undersea City themes.
 - **P2** — Voice Picker: let parents choose narrator voice (Nova, Onyx, Shimmer).
 - **P3** — Highlight-As-Read: softly highlight each sentence as narrator reads it.
