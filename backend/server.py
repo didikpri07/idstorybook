@@ -155,9 +155,9 @@ class OrderStatusUpdate(BaseModel):
 
 
 # ---------- Config ----------
-PAGES_PER_BOOK = 24
-ILLUSTRATION_COUNT = 8  # unique illustrations, each shared across PAGES_PER_ILLUSTRATION pages
-PAGES_PER_ILLUSTRATION = PAGES_PER_BOOK // ILLUSTRATION_COUNT
+PAGES_PER_BOOK = 24            # default book length
+PAGES_PER_ILLUSTRATION = 1     # one unique illustration per page
+ILLUSTRATION_COUNT = PAGES_PER_BOOK // PAGES_PER_ILLUSTRATION
 
 TEXT_MODEL_PROVIDER = "gemini"
 TEXT_MODEL_NAME = "gemini-3-flash-preview"
@@ -243,7 +243,7 @@ Requirements:
 - Exactly {pages_per_book} pages. Each page has 1 to 3 short sentences (max ~40 words).
 - The child ({child_name}) is the hero. Include friends, a challenge, a discovery, and a happy ending.
 - Pace the plot so it arcs naturally across all {pages_per_book} pages.
-- Also produce exactly {illustration_count} short illustration prompts (English, 1-2 sentences each) that describe the key scene for every {PAGES_PER_ILLUSTRATION} pages, in order. Each prompt should describe the setting and action, WITHOUT describing the child's face (a reference photo will handle likeness).
+- Also produce exactly {illustration_count} short illustration prompts (English, 1-2 sentences each) — ONE for each page, describing that page's key scene, in order. Each prompt should describe the setting and action, WITHOUT describing the child's face (a reference photo will handle likeness).
 
 Return ONLY a JSON object exactly like:
 {{
@@ -707,34 +707,39 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
 
     illustration_count = len(story_data["illustration_prompts"])
 
-    # Generate cover illustration + all story illustrations in one parallel batch
-    cover_task = generate_illustration(
-        scene_prompt=cover_prompt_text,
-        theme=input.theme,
-        age=input.age,
-        photo_b64=photo_b64,
-        idx=illustration_count,      # unique idx so filename doesn't clash
-        visual_style=input.visual_style,
-    )
-    illustration_tasks = [cover_task] + [
-        generate_illustration(
-            scene_prompt=prompt,
+    # Build the full image job list: cover + one illustration per page.
+    def _make_illustration(scene_prompt, idx):
+        return generate_illustration(
+            scene_prompt=scene_prompt,
             theme=input.theme,
             age=input.age,
             photo_b64=photo_b64,
-            idx=i,
+            idx=idx,
             visual_style=input.visual_style,
         )
-        for i, prompt in enumerate(story_data["illustration_prompts"])
+
+    async def _batched_illustrations(jobs, batch_size=1):
+        """Run image jobs with bounded concurrency. The Emergent LLM key plan does NOT
+        allow parallel requests (HTTP 429 CONCURRENCY_REQUEST_LIMIT), so default is
+        sequential (batch_size=1). A 32-page book = 33 images generated one after another."""
+        results = []
+        for start in range(0, len(jobs), batch_size):
+            batch = jobs[start:start + batch_size]
+            results.extend(await asyncio.gather(*[_make_illustration(p, i) for (p, i) in batch]))
+        return results
+
+    image_jobs = [(cover_prompt_text, illustration_count)] + [
+        (prompt, i) for i, prompt in enumerate(story_data["illustration_prompts"])
     ]
-    all_results = await asyncio.gather(*illustration_tasks)
+    all_results = await _batched_illustrations(image_jobs)
     cover_img = all_results[0] or PLACEHOLDER_IMAGE
     illustrations_raw = all_results[1:]
     illustrations_generated = sum(1 for img in illustrations_raw if img)
     illustrations = [img or PLACEHOLDER_IMAGE for img in illustrations_raw]
 
     async def _batched_narration(texts: List[str]) -> List[Optional[str]]:
-        batch_size = 8
+        # Emergent LLM key plan does not allow parallel requests, so narrate sequentially.
+        batch_size = 1
         results: List[Optional[str]] = []
         for start in range(0, len(texts), batch_size):
             batch = texts[start:start + batch_size]

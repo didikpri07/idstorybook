@@ -111,6 +111,56 @@ user_problem_statement: >
   ALSO: add a selectable book length (8, 16, 24, 32 pages) on the create page.
 
 backend:
+  - task: "One unique illustration per page (PAGES_PER_ILLUSTRATION=1) + batched image gen"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: >
+          Changed PAGES_PER_ILLUSTRATION from 3 to 1 so every page gets its own unique illustration
+          (illustration_count now == page_count: 8->8, 16->16, 24->24, 32->32, plus 1 cover). Reworded
+          the LLM prompt to request one illustration prompt per page. Page->image mapping is now i//1 = i.
+          UPDATE: first test showed batch_size=6 hit Emergent LLM key HTTP 429 (plan has no parallel
+          requests) so 7/8 images were placeholders. FIXED: image generation and narration are now
+          SEQUENTIAL (batch_size=1). Re-test needed.
+          TEST: POST /api/stories with page_count=8, poll GET /api/stories/{id} until completed; assert
+          len(pages)==8, illustrations_expected==8, every page has text+image, AND the 8 page images are
+          all DISTINCT and real (not placeholder), i.e. illustrations_generated==8. Sequential gen is
+          slower — allow up to ~240s. Report verbatim error if it fails.
+        -working: false
+        -agent: "testing"
+        -comment: >
+          ❌ CRITICAL ISSUE - Concurrent request rate limit causing image generation failures.
+          TEST RESULTS: POST /api/stories with page_count=8 completed in 30s. Story structure is CORRECT:
+          len(pages)=8 ✅, illustrations_expected=8 ✅, all pages have text+image ✅. However, KEY TEST FAILED:
+          Only 2 unique image URLs found (expected 8). 7 pages have placeholder.png, only 1 page has real image.
+          illustrations_generated=1 (only 1 out of 8 succeeded).
+          ROOT CAUSE (from backend logs): Emergent LLM Key hitting concurrent request limit (HTTP 429):
+          "Unlock parallel requests by upgrading to Standard or Pro plan" with error code 'CONCURRENCY_REQUEST_LIMIT'.
+          The _batched_illustrations function uses batch_size=6 to generate 6 images in parallel, but the current
+          Emergent LLM Key plan does NOT support concurrent requests. GEMINI_API_KEY is empty (not configured),
+          so Google AI Pro path is not being used. Most illustrations (7/8) failed with rate limit errors.
+          ISSUE TYPE: Infrastructure/plan limitation, NOT a code bug. The code logic is correct, but batch_size=6
+          exceeds the plan's concurrency limit. SOLUTION: Reduce batch_size from 6 to 1 for sequential processing,
+          OR upgrade Emergent LLM Key plan to support concurrent requests, OR configure GEMINI_API_KEY.
+        -working: true
+        -agent: "testing"
+        -comment: >
+          ✅ ALL TESTS PASSED - Sequential generation fix (batch_size=1) successfully resolved the HTTP 429 rate limit issue.
+          TEST RESULTS: POST /api/stories with page_count=8 completed in 106.4 seconds. ALL ASSERTIONS PASSED:
+          len(pages)=8 ✅, illustrations_expected=8 ✅, illustrations_generated=8 ✅ (100% success rate, no failures),
+          all pages have non-empty text and image ✅, 8 DISTINCT image URLs ✅, ZERO placeholder images ✅.
+          VERIFICATION: Code review confirms batch_size=1 in both _batched_illustrations (line 721) and _batched_narration
+          (line 742), with explicit comments about Emergent LLM key plan limitations. PAGES_PER_ILLUSTRATION=1 (line 159)
+          ensures one unique illustration per page. Sequential generation takes longer (~106s for 8 pages vs ~30s with
+          parallel) but successfully avoids concurrent request limits. Feature is production-ready and working correctly
+          with current Emergent LLM key plan. No rate limit errors, all 8 images generated successfully.
+
   - task: "Selectable book length (page_count 8/16/24/32) in story generation"
     implemented: true
     working: true
@@ -228,21 +278,21 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Selectable book length (page_count 8/16/24/32) in story generation"
-  stuck_tasks: []
+    []
+  stuck_tasks:
+    []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
     -message: >
-      NEW BACKEND TEST NEEDED: Selectable book length. Please test POST /api/stories with
-      page_count=8 and poll GET /api/stories/{id} until status=='completed', then assert the
-      completed story has exactly 8 pages (each with an image + text). Also verify the validator:
-      POST with page_count=99 should return page_count 24 in the immediate response, and POST with
-      no page_count should default to 24. Generation uses real AI (~60-90s) so allow enough poll
-      time (up to ~150s). Keep the full end-to-end poll to page_count=8 only to save credits.
-      Base URL: use REACT_APP_BACKEND_URL from frontend/.env with the /api prefix.
+      NEW BACKEND TEST: one unique illustration per page. POST /api/stories with page_count=8, poll
+      GET /api/stories/{id} until status=='completed' (real AI, allow up to ~180s). Assert:
+      len(pages)==8, illustrations_expected==8, every page has non-empty text and an image, and the
+      8 page image URLs are ALL DISTINCT (this proves 1 illustration per page rather than reused
+      across pages). Report the error field verbatim if it ends 'failed' (could be AI credit/quota —
+      report clearly, not a code bug). Base URL: REACT_APP_BACKEND_URL + /api.
     -agent: "testing"
     -message: >
       ✅ TESTING COMPLETE - All testable scenarios PASSED. Tested 5 scenarios: (1) Anonymous access to /create - PASS: route is public, no redirect, all form fields visible; (2) Sign-in gate + form persistence - PASS: clicking generate navigates to /login, localStorage 'idsb_pending_story' contains all form data (child_name, gender, story_prompt, theme, etc.); (3) Login contextual message - PASS: shows 'Almost there!' heading and 'Your book details are saved' text when pending story exists; (4) Protected routes regression - PASS: /checkout and /dashboard both redirect to /login; (5) Resume-after-login - UNTESTABLE (requires Google OAuth, cannot be automated). Code logic verified for all tasks. Console shows expected 401 errors from auth checks (normal for logged-out state). All critical functionality working correctly. Ready for user acceptance testing of the OAuth flow.
@@ -253,3 +303,24 @@ agent_communication:
       (2) page_count=99 validator: Invalid value correctly defaulted to 24.
       (3) Missing page_count: Correctly defaulted to 24.
       Backend API working perfectly. Feature is production-ready. No issues found.
+    -agent: "testing"
+    -message: >
+      ✅ RE-TEST COMPLETE - One unique illustration per page feature NOW WORKING PERFECTLY after sequential generation fix.
+      TESTED: POST /api/stories with page_count=8, polled until completed (106.4s). ALL CRITICAL ASSERTIONS PASSED:
+      len(pages)=8, illustrations_expected=8, illustrations_generated=8 (100% success, no failures), all pages have
+      non-empty text+image, 8 DISTINCT image URLs, ZERO placeholders. The batch_size=1 fix successfully resolved the
+      HTTP 429 concurrent request limit issue. Sequential generation is slower (~106s vs ~30s) but works reliably with
+      current Emergent LLM key plan. Feature is production-ready. All backend tasks now passing. Main agent should
+      summarize and finish.
+    -agent: "testing"
+    -message: >
+      ❌ CRITICAL ISSUE FOUND - One unique illustration per page feature has concurrent request rate limit problem.
+      TESTED: POST /api/stories with page_count=8, completed in 30s. Story structure CORRECT (len(pages)=8, 
+      illustrations_expected=8, all pages have text+image). KEY TEST FAILED: Only 2 unique image URLs (expected 8).
+      7 pages have placeholder.png, only 1 has real image. illustrations_generated=1/8.
+      ROOT CAUSE: Emergent LLM Key hitting HTTP 429 concurrent request limit. batch_size=6 tries to generate 6 images
+      in parallel, but plan doesn't support concurrent requests. GEMINI_API_KEY is empty (not configured).
+      ISSUE TYPE: Infrastructure/plan limitation, NOT code bug. Code logic is correct.
+      SOLUTIONS: (1) Reduce batch_size from 6 to 1 in _batched_illustrations for sequential processing, OR
+      (2) Upgrade Emergent LLM Key plan to support concurrent requests, OR (3) Configure GEMINI_API_KEY.
+      Recommend option 1 (reduce batch_size to 1) as immediate fix for compatibility with current plan.

@@ -22,11 +22,12 @@ high-quality physical printed copy.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
 ## What's implemented (as of 2026-08-25)
+- **One Illustration Per Page (2026-09-17) — DONE & BACKEND-TESTED**:
+  - `PAGES_PER_ILLUSTRATION = 1` — every page now has its own unique illustration (8-page book = 8 illustrations + cover, 32-page = 32 + cover). Prompt reworded to request one scene per page.
+  - Image + narration generation is SEQUENTIAL (batch_size=1) because the Emergent LLM key plan does not allow parallel requests (parallel batches hit HTTP 429). Larger books therefore take longer (8 pages ≈ 106s; 32 pages will be several minutes). Adding a paid GEMINI_API_KEY (Google AI Pro) or upgrading the LLM key plan would allow parallelizing for speed.
+  - Verified: page_count=8 → 8 pages, 8 distinct real images, 0 placeholders.
 - **Selectable Book Length (2026-09-17) — DONE & BACKEND-TESTED**:
-  - New "Book length" picker on the create form: 8, 16, 24 (default), or 32 pages.
-  - Backend: `StoryCreate.page_count` (field_validator defaults any non-8/16/24/32 value to 24). `generate_story_text` sizes the story and computes `illustration_count = ceil(page_count/3)` (8→3, 16→6, 24→8, 32→11 unique illustrations, each shared across 3 pages). `page_count` stored on the story doc.
-  - Frontend: `page_count` in the wizard form + bilingual labels; the "ready" screen text is now page-count aware.
-  - Backend testing agent verified page_count=8 produces exactly 8 pages / 3 illustrations, and the validator defaults 99 and missing → 24.
+  - "Book length" picker on the create form: 8, 16, 24 (default), or 32 pages. `StoryCreate.page_count` validator defaults invalid values to 24. `page_count` stored on the story doc; "ready" screen text is page-count aware.
 
 - **Anonymous-first Create flow (2026-09-17) — DONE**:
   - `/create` is now PUBLIC (removed `ProtectedRoute`). Logged-out parents can fill the entire wizard (name, age, personality, world, story idea, visual style, photo, language) before signing in.
