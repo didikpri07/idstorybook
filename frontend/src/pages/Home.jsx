@@ -4,6 +4,7 @@ import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
 import { SamplePeek } from "@/components/SamplePeek";
 import { themes } from "@/lib/constants";
+import "@/Home.css";
 
 function languageLabel(theme) {
   return window.localStorage.getItem("kids-storybook-ui") === "id" ? theme.id : theme.name;
@@ -29,7 +30,11 @@ export default function Home() {
         </div>
         <div className="hero-art">
           <div className="sun" />
-          <div className="art-label">A story starring your little one</div>
+          <div className="art-label" data-testid="home-story-starring-label">
+            {text.heroStarringPrefix}{" "}
+            <span className="hero-child-highlight" data-testid="home-little-one-highlight">{text.heroStarringChild}</span>
+            {text.heroStarringSuffix && ` ${text.heroStarringSuffix}`}
+          </div>
           <img src="https://images.unsplash.com/photo-1645113614899-000bdab2bbcf?crop=entropy&cs=srgb&fm=jpg&q=85" alt="Whimsical storybook scene" data-testid="hero-image" />
           <div className="floating-note note-one">✦ <b>{text.madeWonder}</b></div>
           <div className="floating-note note-two">☼ {text.printed}</div>

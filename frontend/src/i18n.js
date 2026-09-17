@@ -7,6 +7,7 @@ export const languages = [
 
 export const copy = {
   en: {
+    heroStarringPrefix: "A story starring", heroStarringChild: "your little one", heroStarringSuffix: "",
     language: "Language", interface: "Interface language", storybook: "Storybook language", choose: "Choose language",
     library: "My library", orders: "Print Orders", help: "Help", signIn: "Sign in", signOut: "Sign out",
     homeEyebrow: "A little magic, made for them", homeTitleA: "Big adventures.", homeTitleB: "Just their size.", homeDescription: "Turn a favourite face into a one-of-a-kind storybook they'll read again and again.", createBook: "Create a book", viewLibrary: "View my library", loved: "Loved by 2,400+ little readers", heroLabel: "A story with", heroLabelBold: "their name on it", madeWonder: "Made with wonder", printed: "Printed & shipped", pickChapter: "Pick their first chapter", whereGo: "Where will they go?", buildStory: "Build a story", sampleEyebrow: "Sneak peek", sampleTitleA: "See the magic", sampleTitleB: "before you make yours.", sampleDescription: "Every book comes fully illustrated and read aloud by a warm narrator. Here's one we baked earlier.", sampleCta: "Peek inside the sample", sampleNarrated: "Narrated aloud", samplePage: "Page",
@@ -18,6 +19,7 @@ export const copy = {
     adminEyebrow: "Studio desk", printA: "Print", printB: "orders.", adminView: "ADMIN VIEW", incoming: "Incoming", production: "In production", shipped: "Shipped", customer: "Customer", book: "Book", newOrders: "New orders will appear here.", orderReceived: "Order received",
   },
   id: {
+    heroStarringPrefix: "Cerita dengan", heroStarringChild: "si kecil", heroStarringSuffix: "sebagai tokoh utama",
     language: "Bahasa", interface: "Bahasa antarmuka", storybook: "Bahasa buku cerita", choose: "Pilih bahasa",
     library: "Perpustakaan saya", orders: "Pesanan Cetak", help: "Bantuan", signIn: "Masuk", signOut: "Keluar",
     homeEyebrow: "Sedikit keajaiban untuk mereka", homeTitleA: "Petualangan besar.", homeTitleB: "Seukuran mereka.", homeDescription: "Ubah wajah kesayangan menjadi buku cerita unik yang akan mereka baca berulang kali.", createBook: "Buat buku", viewLibrary: "Lihat perpustakaan", loved: "Disukai oleh 2.400+ pembaca kecil", heroLabel: "Cerita dengan", heroLabelBold: "nama mereka", madeWonder: "Dibuat dengan keajaiban", printed: "Dicetak & dikirim", pickChapter: "Pilih bab pertama", whereGo: "Mereka akan pergi ke mana?", buildStory: "Buat cerita", sampleEyebrow: "Intip sebentar", sampleTitleA: "Lihat keajaibannya", sampleTitleB: "sebelum kamu membuatnya.", sampleDescription: "Setiap buku dilengkapi ilustrasi penuh dan dibacakan oleh pencerita yang hangat. Ini contoh yang sudah kami siapkan.", sampleCta: "Intip contoh buku", sampleNarrated: "Dibacakan pencerita", samplePage: "Halaman",

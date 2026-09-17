@@ -126,6 +126,13 @@ Initial hypothesis: digital single book Rp49,000–79,000; longer books priced h
 - Remaining verification limitation: controlled progress fixtures sometimes reached their terminal state before browser captured the initial generating view. Backend progress/race/checkpoint tests pass; generating UI and terminal partial/reader states were verified individually. Google callback and real reset email delivery are not verified because credentials intentionally deferred. Full paid Stripe settlement/webhook completion not exercised; test checkout session creation verified.
 
 ## Next action list
+### Home visual edit — 2026-09-17
+- User request: Home line32 / Home_32_10 — change “your little one” to baby blue and check/correct Bahasa Indonesia translation.
+- Replaced hardcoded hero label with localized prefix/child/suffix. English: “A story starring your little one”. Indonesian: “Cerita dengan si kecil sebagai tokoh utama”.
+- Only “your little one” / “si kecil” uses baby blue `#89cff0`, with scoped CSS in `frontend/src/Home.css`; rest of existing home design retained.
+- Browser verified English and Indonesian full text, computed RGB137/207/240, language switching and Indonesian persistence after reload. Screenshots captured for both languages.
+
+### Remaining next actions
 1. Supply Google OAuth Web client ID/secret; register exact `GOOGLE_OAUTH_REDIRECT_URI`; verify Google login end-to-end.
 2. Supply Resend API key and verified sender/domain; verify real password-reset email delivery.
 3. Supply Midtrans server/client settings when Indonesian print checkout is needed (existing provider integration retained).
