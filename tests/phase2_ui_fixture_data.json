@@ -1,0 +1,24 @@
+{
+  "guest_claim": {
+    "story_id": "TEST_UI_GUESTCLAIM_d67a158d",
+    "guest_token": "test_ui_guestclaim_85449e44d6d192af230e"
+  },
+  "progress_complete": {
+    "story_id": "TEST_UI_PROGCOMP_4012d699",
+    "guest_token": "test_ui_progcomp_029429014864029f5bd8"
+  },
+  "progress_partial": {
+    "story_id": "TEST_UI_PROGPART_8b27572d",
+    "guest_token": "test_ui_progpart_2c7bc4077af3c4eae46d"
+  },
+  "legacy_no_timestamps": {
+    "story_id": "TEST_UI_LEGACY_665512ea",
+    "guest_token": "test_ui_legacy_3f68e8f4d3ffd9bb2b02"
+  },
+  "mobile_dots_32": {
+    "story_id": "TEST_UI_DOTS32_947e3989",
+    "guest_token": "test_ui_dots32_13c28735bb624f1a97d7"
+  },
+  "qa_story_id": "e62b417b-03b1-4278-99a7-3e4c5d00d386",
+  "created_at": "2026-09-17T17:53:53.437295+00:00"
+}

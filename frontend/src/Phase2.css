@@ -1,0 +1,42 @@
+/* Phase 2 additions intentionally extend the supplied Fredoka / Outfit design. */
+.account-page{min-height:calc(100vh - 76px);display:flex;align-items:center;justify-content:center;padding:48px 20px 72px}
+.account-page .auth-card{max-width:456px;padding:36px 38px;border-radius:14px}
+.account-page .auth-brand{margin-bottom:26px}.account-page .auth-brand b{color:var(--purple)}
+.account-page .auth-card h1{font-size:34px}.account-page .auth-card>p{margin-bottom:24px}
+.account-form{display:flex;flex-direction:column;gap:16px;text-align:left}
+.account-form label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:500}
+.account-form input{height:45px;padding:12px;font:14px Outfit}
+.account-form small{color:var(--muted);font-size:11px;margin-top:-8px}
+.account-form .btn{height:46px;font-size:14px}.account-forgot{align-self:flex-end;font-size:12px;color:var(--purple);margin-top:-5px}
+.auth-divider{display:flex;align-items:center;gap:14px;font-size:11px;color:var(--muted);margin:23px 0}
+.auth-divider:before,.auth-divider:after{content:'';height:1px;flex:1;background:var(--line)}
+.account-page .btn-google{height:46px;font-size:13px}.integration-note{display:block;font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
+.auth-card .auth-switch{margin:23px 0 16px!important;font-size:13px}.auth-switch a{color:var(--purple);font-weight:600}
+.guest-continue{display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;margin-top:22px;color:var(--muted)}
+.auth-privacy{display:flex;gap:6px;align-items:center;justify-content:center;font-size:10px;color:var(--muted);margin-top:26px}
+.reset-icon{color:var(--purple);display:grid;place-items:center;margin-bottom:24px}
+.account-success{font-size:14px;padding:18px;background:#edfaf4;color:#177e59;border:1px solid #bce8d7;border-radius:8px}
+.error-message{padding:12px 14px;background:#fff0ed;border:1px solid #ffc7c0;color:#98392f;border-radius:8px;font-size:13px;line-height:1.5;margin-bottom:14px;overflow-wrap:anywhere}
+.voice-field .field-label{flex-direction:row;align-items:center;gap:7px;color:var(--ink)}
+.btn:disabled,.btn-google:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.live-progress{max-width:680px;margin:auto}.live-progress .eyebrow{justify-content:center;letter-spacing:0}.live-progress h1{font-size:46px;line-height:1.15;overflow-wrap:anywhere}
+.live-progress .generating-steps-list{margin:26px auto 0}.progress-details{max-width:420px;margin:12px auto;display:flex;justify-content:space-between;gap:16px;font-size:12px;color:var(--muted)}
+.progress-status-note{margin:22px auto;color:var(--muted);font-size:13px;max-width:430px;line-height:1.6}
+.partial-banner,.guest-save-banner{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:20px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 26px}
+.partial-banner{color:#936823}.partial-banner p,.guest-save-banner p{font-size:13px;line-height:1.5;margin:5px 0;color:var(--muted)}
+.partial-banner strong,.guest-save-banner strong{font:500 19px Fredoka}.guest-save-banner>svg{flex-shrink:0;color:var(--purple)}.guest-save-banner>div{flex:1}
+.guest-save-banner .btn,.partial-banner .btn{flex-shrink:0;font-size:12px}
+.sentence-highlight{border:0;font:inherit;color:inherit;line-height:inherit;background:transparent;padding:1px 0;white-space:normal;text-align:left;cursor:pointer;border-radius:4px;transition:background-color .2s ease;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.sentence-highlight.is-active{background:#fff1a8;box-shadow:0 0 0 3px #fff1a8}.sentence-highlight:hover{background:#fff8d6}.sentence-highlight:focus-visible{outline:2px solid var(--purple);outline-offset:3px}
+.narrator-voice-name{color:var(--muted);font-size:11px;margin-left:auto}
+.book-text{min-width:0}.book-text p{overflow-wrap:anywhere}.reader-controls{gap:14px}.dots{flex-wrap:wrap;justify-content:center;max-width:260px;row-gap:8px}.reader-controls button{flex-shrink:0}
+.reader-head{gap:16px;flex-wrap:wrap}.reader-head-actions{flex-wrap:wrap;flex-shrink:1}.reader-title{overflow-wrap:anywhere}
+.stories-grid{margin-bottom:44px}.story-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px}
+.story-card .story-card-image{position:relative;flex:0 0 84px}.story-card .story-card-image img{width:84px;height:95px}.story-card-body{min-width:0}.story-card-body b{overflow-wrap:anywhere}
+.processing-badge,.story-status{display:block;font-size:10px;line-height:1.4;color:var(--purple)}
+.guest-limit-note{font-size:12px;color:var(--muted);line-height:1.6;text-align:center}.guest-limit-note a{color:var(--purple);font-weight:600}
+.private-note{font-size:11px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-top:14px}
+.mobile-library-link{display:flex;gap:9px;align-items:center;padding:10px 14px;font-size:13px;border-radius:8px}.mobile-library-link:hover{background:#f7f5fd;color:var(--purple)}
+.checkout-summary>p{font-size:14px;line-height:1.6;color:var(--muted);margin:0 0 24px}.checkout-summary>small{font-size:11px;color:var(--muted)}.price-display{display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px;border-top:1px solid var(--line);padding-top:18px;gap:14px}.price-display span{font-size:13px;color:var(--muted)}.price-display b{font:500 26px Fredoka}.checkout-form>label,.checkout-form .two-col>label{display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--muted)}.checkout-page .format-option{padding-top:40px}.checkout-page .format-option>svg{left:14px;right:auto}
+@media(max-width:720px){.account-page{padding:26px 16px 48px;min-height:calc(100vh - 66px)}.account-page .auth-card{padding:30px 22px}.account-page .auth-card h1{font-size:30px}.live-progress h1{font-size:34px}.partial-banner,.guest-save-banner{flex-wrap:wrap}.guest-save-banner .btn,.partial-banner .btn{width:100%}.stories-grid .story-cards{grid-template-columns:1fr}.reader-head-actions{width:100%;gap:8px}.reader-head-actions .btn{white-space:normal;flex:1}.book-text{padding:28px 22px}.topbar-right{gap:7px}.user-chip>span:not(.user-avatar-fallback){max-width:74px;overflow:hidden;text-overflow:ellipsis}.topbar .brand{font-size:17px;gap:5px}.topbar .brand-mark{width:27px;height:27px}.user-chip{padding-right:8px;gap:5px}}
+@media(prefers-reduced-motion:reduce){.generating-book-pulse{animation:none}.generating-progress-fill,.sentence-highlight{transition:none}}

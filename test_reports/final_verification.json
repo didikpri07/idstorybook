@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-17",
+  "case": "IDStorybook Phase 2 feature expansion",
+  "regression": {"passed": 21, "failed": 0, "report": "/app/test_reports/pytest/pytest_results_final.xml"},
+  "frontend_build": "pass",
+  "real_generation": "8-page English book complete with cover, illustrations, Algenib narration and sentence timestamps; checkpoint retry reused existing assets",
+  "real_voice_probes": ["Sulafat English passed", "Achernar Indonesian passed"],
+  "browser_checks": ["email login and private library", "guest signup claims own story", "sentence highlighting", "legacy audio fallback", "bilingual controls", "390px layouts and 32-page dots", "nonempty nine-page PDF", "second-sentence seeking before first play", "manual turn clears highlight and pauses", "automatic next-page narration starts correctly", "Stripe test checkout form available", "unconfigured Midtrans state explicit and disabled"],
+  "resolved_iteration_2_issues": ["Stripe missing runtime key configured using available TEST key; real checkout API returns200 with session URL", "Missing Midtrans configuration now returns JSON503 before order insertion", "Manual page-change highlighting reset fixed", "Audio seek support added with HTTP206 byte ranges"],
+  "audio_range_check": {"range": "bytes=100-199", "status": 206, "content_length": 100},
+  "external_setup_pending": ["Google OAuth client credentials and live callback verification", "Resend key and verified sender, real reset-email delivery", "Midtrans credentials for Indonesian checkout"],
+  "verification_limits": ["Full Stripe test payment settlement/webhook not exercised; checkout session creation verified", "Progress fixture transitions could finish before screenshot captured initial generating state; backend transitions and individual UI states verified"],
+  "application_mocked_apis": [],
+  "test_only_doubles": "Isolated async generation providers used to force failures/races; no production mocks"
+}

@@ -1,0 +1,92 @@
+{
+  "summary": "Completed focused Phase 2 verification for retry/checkpoint recovery, ownership/claim, reader timing behavior, voice probes, PDF, and checkout smoke. Deterministic backend recovery/race suites now run and pass; key blocker remains payment provider config handling causing 502 on orders.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/orders",
+        "issue": "POST returns 502 for both Stripe and Midtrans paths. Backend logs show uncaught TypeError when STRIPE_API_KEY or MIDTRANS_SERVER_KEY is None (payment client constructors/auth build fail).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "/api/orders",
+        "issue": "Error surface is generic 502 HTML at preview edge; API should return explicit JSON configuration error (e.g., 503 payment not configured)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Storybook reader highlighting",
+        "issue": "After page change, active sentence highlight was still present in one run (expected reset state).",
+        "selector": "[aria-current='true']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Checkout (Stripe + Midtrans smoke)",
+        "issue": "UI stays on checkout and shows error because /api/orders returns 502; no redirect to Stripe and no Midtrans token.",
+        "affected_selectors": [
+          "[data-testid='checkout-form']",
+          "[data-testid='place-order-button']",
+          "[data-testid='checkout-error']"
+        ]
+      },
+      {
+        "flow": "Generation progress auto-switch visual proof",
+        "issue": "With fast fixture transitions, browser often landed directly on terminal state (reader/partial) before generating screen was visible; backend checkpoint/progress tests passed and terminal UI states were verified.",
+        "affected_selectors": [
+          "[data-testid='generating-page']",
+          "[data-testid='reader-story-title']",
+          "[data-testid='partial-story-banner']"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/conftest.py",
+    "/app/tests/test_phase2_api.py",
+    "/app/tests/test_phase2_recovery_pipeline.py",
+    "/app/tests/test_phase2_retry_endpoint.py",
+    "/app/tests/test_phase2_real_voice_probe.py",
+    "/app/tests/seed_phase2_ui_fixtures.py",
+    "/app/tests/update_phase2_ui_transitions.py",
+    "/app/tests/cleanup_phase2_ui_fixtures.py",
+    "/app/test_reports/pytest/pytest_results_iteration2.xml",
+    "/app/test_reports/pytest/pytest_results_voice_probe.xml"
+  ],
+  "action_items": [
+    "Guard payment provider initialization in /api/orders: if Stripe/Midtrans keys are missing, return explicit JSON 503 and avoid TypeError stack traces.",
+    "Re-verify reader highlight reset behavior across page-change and auto-next after payment blocker fix.",
+    "Optionally add deterministic UI progress transition harness with longer controlled delay so generating screen visibility is always captured before terminal switch."
+  ],
+  "critical_code_review_comments": [
+    "test_phase2_api.py hygiene issue fixed: removed global auth_limits wipe and added scoped test data cleanup only for test-prefixed records.",
+    "Migration coverage now executes actual migrate_legacy.migrate() (idempotency verified) instead of duplicating update queries.",
+    "Duplicate route check added and currently passes: exactly one GET /api/auth/me and one POST /api/auth/logout.",
+    "test_credentials file is present but effectively empty; shared durable test accounts should be documented there for future agents."
+  ],
+  "updated_files": [
+    "/app/tests/conftest.py",
+    "/app/tests/test_phase2_api.py",
+    "/app/tests/test_phase2_recovery_pipeline.py",
+    "/app/tests/test_phase2_retry_endpoint.py",
+    "/app/tests/test_phase2_real_voice_probe.py",
+    "/app/tests/seed_phase2_ui_fixtures.py",
+    "/app/tests/update_phase2_ui_transitions.py",
+    "/app/tests/cleanup_phase2_ui_fixtures.py",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "success_rate": {
+    "backend": "95%",
+    "frontend": "78%"
+  },
+  "seed_data_creation": "Created TEST_UI_* guest fixture stories/tokens for browser verification and cleaned them afterward using /app/tests/cleanup_phase2_ui_fixtures.py.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend deterministic recovery/race suites are now in place and green (21/21 in iteration2 xml + real voice probe pass). Browser confirmed guest-save claim isolation, legacy no-timestamp rendering, bilingual guest/progress/reset/voice labels, mobile 32-dot no overflow, and PDF download (non-empty; regex counted 9 /Type /Page objects). Remaining blocker is payments config handling (/api/orders 502 for both Stripe and Midtrans).",
+  "rca of the issue": "Checkout failures reproduce consistently via UI and direct API. Root cause from backend.err.log: Stripe path crashes at StripeCheckout init when STRIPE_API_KEY is None (TypeError: 'NoneType' not iterable); Midtrans path crashes building BasicAuth when MIDTRANS_SERVER_KEY is None (TypeError bytes expected). Endpoint catches exception and returns generic 502, causing frontend Cloudflare-style error response."
+}
