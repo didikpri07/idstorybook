@@ -101,3 +101,118 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: >
+  Change the storybook creation flow so an UNLOGGED-IN user can enter all the book
+  details (child name, age, personality, world/theme, story idea, illustration style,
+  photo, story language) BEFORE they log in. Login should trigger when they click the
+  generate button ("Create the magic"). After sign-in, the story should generate
+  automatically and be linked to the new account (appear in their library).
+
+frontend:
+  - task: "Anonymous access to /create wizard (route now public)"
+    implemented: true
+    working: true
+    file: "frontend/src/App.js, frontend/src/pages/Create.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Removed ProtectedRoute wrapper from /create. Logged-out users should now see the full create form (no redirect to /login). Verify child-name-input etc. render without auth."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASS - Tested anonymous access to /create. Logged-out users can access /create without redirect to /login. The child-name-input field and all form elements are visible and functional. URL stays on /create route as expected. Screenshot: test1_create_logged_out.png"
+
+  - task: "Sign-in gate on generate + form persistence to localStorage"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Create.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "When a logged-out user fills the form and clicks Create (generate-story-button), the full form (incl. photo, plus photo_name) is saved to localStorage key 'idsb_pending_story' and the app navigates to /login. Large photos are auto-downscaled to fit storage quota. Verify: after submit URL becomes /login and localStorage has the pending payload with the entered values."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASS - Tested form persistence flow. Filled form with child_name='Maya', gender='Curious', story_prompt='A brave night adventure', theme='Moonlit Forest'. After clicking generate-story-button, app correctly navigated to /login. localStorage key 'idsb_pending_story' exists with all form data correctly persisted including child_name, age, gender, theme, visual_style, photo_base64, story_language, story_prompt, and photo_name. All values match input."
+
+  - task: "Login page contextual 'Almost there!' message when a pending book exists"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Login.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Login page shows heading 'Almost there!' and 'Your book details are saved...' text (instead of 'Welcome back') when localStorage 'idsb_pending_story' is present. 'Continue with Google' button still shown."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASS - Tested login page contextual messaging. When localStorage 'idsb_pending_story' is present, login page correctly displays heading 'Almost there!' (not 'Welcome back') and body text 'Your book details are saved. Sign in and we'll start creating it right away — it'll appear in your library.' The 'Continue with Google' button (google-signin-button) is visible. Screenshot: test3_login_almost_there.png"
+
+  - task: "Resume-after-login auto-generation (AuthCallback routes to /create, resume effect generates)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/AuthCallback.jsx, frontend/src/pages/Create.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "After Google OAuth, AuthCallback checks localStorage 'idsb_pending_story'; if present routes to /create (else /dashboard). Create resume effect restores form and auto-calls POST /api/stories with credentials so the story links to user. NOTE: full path requires real Google OAuth and likely CANNOT be automated. Verify logic where possible; otherwise report as untestable due to OAuth."
+        -working: "NA"
+        -agent: "testing"
+        -comment: "⚠️ UNTESTABLE VIA AUTOMATION (OAuth) - This flow requires real Google OAuth authentication which cannot be automated. Code review confirms correct implementation: AuthCallback.jsx (lines 25-30) checks localStorage 'idsb_pending_story' and routes to /create if present. Create.jsx resume effect (lines 114-127) restores form data and calls startGeneration() to link story to authenticated user. Logic is sound but runtime testing requires manual Google OAuth flow."
+
+  - task: "Regression: protected routes /checkout and /dashboard still require login"
+    implemented: true
+    working: true
+    file: "frontend/src/App.js, frontend/src/components/ProtectedRoute.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Only /create was unprotected. /checkout and /dashboard must still redirect logged-out users to /login."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ PASS - Tested protected route regression. With clean state (no auth), navigating to /checkout correctly redirects to /login. Navigating to /dashboard correctly redirects to /login. Both routes remain properly protected. Screenshot: test4_protected_routes.png"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Anonymous access to /create wizard (route now public)"
+    - "Sign-in gate on generate + form persistence to localStorage"
+    - "Login page contextual 'Almost there!' message when a pending book exists"
+    - "Regression: protected routes /checkout and /dashboard still require login"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: >
+      Please test the new anonymous-first create flow (frontend). Auth is Google OAuth only
+      (no static creds — see /app/memory/test_credentials.md), so the post-login resume step
+      likely cannot be automated; if so, mark it untestable and focus on the logged-OUT
+      portions: (1) /create loads for logged-out users with no redirect; (2) filling the form
+      and clicking the generate button navigates to /login AND writes localStorage
+      'idsb_pending_story' containing the entered values (child_name, gender, story_prompt);
+      (3) /login shows 'Almost there!' when that localStorage key is present; (4) regression:
+      /checkout and /dashboard still redirect logged-out users to /login. Base URL is the
+      REACT_APP_BACKEND_URL preview domain.
+    -agent: "testing"
+    -message: >
+      ✅ TESTING COMPLETE - All testable scenarios PASSED. Tested 5 scenarios: (1) Anonymous access to /create - PASS: route is public, no redirect, all form fields visible; (2) Sign-in gate + form persistence - PASS: clicking generate navigates to /login, localStorage 'idsb_pending_story' contains all form data (child_name, gender, story_prompt, theme, etc.); (3) Login contextual message - PASS: shows 'Almost there!' heading and 'Your book details are saved' text when pending story exists; (4) Protected routes regression - PASS: /checkout and /dashboard both redirect to /login; (5) Resume-after-login - UNTESTABLE (requires Google OAuth, cannot be automated). Code logic verified for all tasks. Console shows expected 401 errors from auth checks (normal for logged-out state). All critical functionality working correctly. Ready for user acceptance testing of the OAuth flow.
