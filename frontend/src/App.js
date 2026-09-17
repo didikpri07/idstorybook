@@ -23,7 +23,7 @@ function AppRouter() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/create" element={<ProtectedRoute><Create /></ProtectedRoute>} />
+      <Route path="/create" element={<Create />} />
       <Route path="/storybook/:id" element={<StorybookPage />} />
       <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
       <Route path="/checkout/success" element={<CheckoutSuccess />} />

@@ -1,15 +1,54 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, BookOpen, Check, CloudUpload, SmilePlus, Sun, User, WandSparkles } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
+import { useAuth } from "@/context/AuthContext";
 import { Shell } from "@/components/Shell";
 import { CoverPreview } from "@/components/CoverPreview";
 import { StylePicker } from "@/components/StylePicker";
 import { API, themes, storyLanguages } from "@/lib/constants";
 
+// Key used to stash an in-progress book while an anonymous parent signs in.
+export const PENDING_STORY_KEY = "idsb_pending_story";
+
+// Shrink an oversized photo so the whole form fits in localStorage across the OAuth redirect.
+const downscalePhoto = (dataUrl, maxDim = 1024) => new Promise(resolve => {
+  try {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => resolve("");
+    img.src = dataUrl;
+  } catch { resolve(""); }
+});
+
+// Persist the filled form before sending the parent to sign in. Falls back to a
+// smaller photo (or none) if the browser storage quota is exceeded.
+const persistPendingStory = async data => {
+  try {
+    localStorage.setItem(PENDING_STORY_KEY, JSON.stringify(data));
+    return;
+  } catch { /* quota — try a smaller photo */ }
+  try {
+    const shrunk = data.photo_base64 ? await downscalePhoto(data.photo_base64, 1024) : "";
+    localStorage.setItem(PENDING_STORY_KEY, JSON.stringify({ ...data, photo_base64: shrunk }));
+  } catch {
+    try { localStorage.setItem(PENDING_STORY_KEY, JSON.stringify({ ...data, photo_base64: "" })); } catch { /* give up */ }
+  }
+};
+
 export default function Create() {
   const { language, text } = useLanguage();
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en", story_prompt: "" });
   const [photoName, setPhotoName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,15 +88,43 @@ export default function Create() {
   }, [processingId, text.createError]);
 
   const submit = async event => {
-    event.preventDefault(); setLoading(true); setError("");
+    event.preventDefault();
+    // Unauthenticated parents fill everything first, then sign in. Stash the form
+    // and send them to login; the story generates automatically once they return.
+    if (!user) {
+      await persistPendingStory({ ...form, photo_name: photoName });
+      navigate("/login", { state: { from: { pathname: "/create" } } });
+      return;
+    }
+    startGeneration(form);
+  };
+
+  const startGeneration = async payload => {
+    setLoading(true); setError("");
     try {
-      const response = await axios.post(`${API}/stories`, form, { timeout: 30000, withCredentials: true });
+      const response = await axios.post(`${API}/stories`, payload, { timeout: 30000, withCredentials: true });
       setProcessingId(response.data.id);
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setError(detail || text.createError);
     } finally { setLoading(false); }
   };
+
+  // Resume a book the parent started before signing in.
+  useEffect(() => {
+    if (authLoading || !user) return;
+    let raw = null;
+    try { raw = localStorage.getItem(PENDING_STORY_KEY); } catch { raw = null; }
+    if (!raw) return;
+    try { localStorage.removeItem(PENDING_STORY_KEY); } catch { /* ignore */ }
+    try {
+      const saved = JSON.parse(raw);
+      const restored = { ...form, ...saved };
+      setForm(restored);
+      if (saved.photo_base64) setPhotoName(saved.photo_name || "Your photo");
+      startGeneration(restored);
+    } catch { /* corrupt payload — ignore */ }
+  }, [authLoading, user]);
 
   if (preview) return (
     <Shell>

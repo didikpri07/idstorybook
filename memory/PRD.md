@@ -22,6 +22,13 @@ high-quality physical printed copy.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
 ## What's implemented (as of 2026-08-25)
+- **Anonymous-first Create flow (2026-09-17) — DONE**:
+  - `/create` is now PUBLIC (removed `ProtectedRoute`). Logged-out parents can fill the entire wizard (name, age, personality, world, story idea, visual style, photo, language) before signing in.
+  - On submit while logged out, the full form (incl. photo) is stashed in `localStorage` under `idsb_pending_story` and the parent is sent to `/login`. Large photos are auto-downscaled to fit storage quota.
+  - `Login.jsx` shows a contextual "Almost there! Your book details are saved…" message when a pending book exists.
+  - After Google sign-in, `AuthCallback.jsx` detects the pending book and routes back to `/create`, where a resume effect restores the form and auto-starts generation.
+  - Because the resumed `POST /api/stories` carries the session cookie, `get_optional_user` links the story to the new account (appears in the dashboard library). No backend change required.
+
 - **Dedicated Cover Page (2026-08-25) — DONE & TESTED**:
   - Backend `run_story_generation()` generates a unique AI cover: `cover_title` (poetic, story-specific) + `cover_prompt` (cinematic full-page illustration prompt), both produced by the LLM alongside story text.
   - Cover illustration generated in parallel with story illustrations (no extra latency). Saved as `story.cover = {title, image}` in MongoDB.

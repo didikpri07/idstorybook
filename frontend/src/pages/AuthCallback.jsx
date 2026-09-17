@@ -20,7 +20,15 @@ export default function AuthCallback() {
 
     const sessionId = decodeURIComponent(match[1]);
     axios.post(`${API}/auth/session`, { session_id: sessionId }, { withCredentials: true })
-      .then(({ data }) => { setUser(data.user); navigate(data.user?.role === "admin" ? "/admin" : "/dashboard", { replace: true }); })
+      .then(({ data }) => {
+        setUser(data.user);
+        let hasPendingStory = false;
+        try { hasPendingStory = Boolean(localStorage.getItem("idsb_pending_story")); } catch { hasPendingStory = false; }
+        const dest = data.user?.role === "admin"
+          ? "/admin"
+          : (hasPendingStory ? "/create" : "/dashboard");
+        navigate(dest, { replace: true });
+      })
       .catch(() => navigate("/login", { replace: true }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
