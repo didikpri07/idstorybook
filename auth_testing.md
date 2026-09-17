@@ -49,7 +49,7 @@ await page.context().add_cookies([{
     "secure": True,
     "sameSite": "None"
 }])
-await page.goto("https://storybook-magic-29.preview.emergentagent.com/dashboard")
+await page.goto("https://narrative-id.preview.emergentagent.com/dashboard")
 ```
 
 ## Checklist

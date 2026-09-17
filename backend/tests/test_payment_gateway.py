@@ -15,7 +15,7 @@ COMMON_ORDER = {
     "child_name": "TEST_Child",
     "format": "Hardcover",
     "gift_box": False,
-    "origin_url": "https://storybook-magic-29.preview.emergentagent.com",
+    "origin_url": "https://narrative-id.preview.emergentagent.com",
 }
 
 
