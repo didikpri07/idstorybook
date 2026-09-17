@@ -13,7 +13,7 @@ import logging
 import asyncio
 import httpx
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Literal
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -128,6 +128,12 @@ class StoryCreate(BaseModel):
     photo_base64: Optional[str] = None  # data URL or raw base64
     story_language: str = "en"
     story_prompt: Optional[str] = None  # Parent's custom story idea / direction
+    page_count: int = 24  # 8, 16, 24, or 32
+
+    @field_validator("page_count")
+    @classmethod
+    def _valid_page_count(cls, v):
+        return v if v in (8, 16, 24, 32) else 24
 
 
 class OrderCreate(BaseModel):
@@ -197,11 +203,14 @@ def _parse_json_from_text(text: str) -> dict:
 
 async def generate_story_text(
     child_name: str, age: int, gender: str, theme: str, language: str,
-    story_prompt: Optional[str] = None,
+    story_prompt: Optional[str] = None, page_count: int = PAGES_PER_BOOK,
 ) -> dict:
     """Generate a personalized storybook with title and illustration prompts.
     Primary: Google AI via GEMINI_API_KEY. Fallback: Emergent LLM Key."""
     lang_name = "Bahasa Indonesia" if language == "id" else "English"
+    # Dynamic sizing: one unique illustration per PAGES_PER_ILLUSTRATION pages.
+    pages_per_book = page_count
+    illustration_count = (page_count + PAGES_PER_ILLUSTRATION - 1) // PAGES_PER_ILLUSTRATION
     system_msg = (
         "You are a beloved children's storybook author. You write warm, age-appropriate, "
         "imaginative stories with simple vocabulary and gentle rhythm. Always respond in "
@@ -219,7 +228,7 @@ Important: Make this the heart of the story. {child_name} should face exactly th
 challenge, or topic as the central adventure — resolve it warmly and age-appropriately.
 """
 
-    user_prompt = f"""Write a {PAGES_PER_BOOK}-page personalized children's storybook.
+    user_prompt = f"""Write a {pages_per_book}-page personalized children's storybook.
 
 Child details:
 - Name: {child_name}
@@ -231,20 +240,21 @@ Child details:
 Requirements:
 - The story must be in {lang_name}.
 - Age-appropriate for a {age}-year-old (short sentences, kind tone, no scary content).
-- Exactly {PAGES_PER_BOOK} pages. Each page has 1 to 3 short sentences (max ~40 words).
+- Exactly {pages_per_book} pages. Each page has 1 to 3 short sentences (max ~40 words).
 - The child ({child_name}) is the hero. Include friends, a challenge, a discovery, and a happy ending.
-- Also produce exactly {ILLUSTRATION_COUNT} short illustration prompts (English, 1-2 sentences each) that describe the key scene for every {PAGES_PER_ILLUSTRATION} pages, in order. Each prompt should describe the setting and action, WITHOUT describing the child's face (a reference photo will handle likeness).
+- Pace the plot so it arcs naturally across all {pages_per_book} pages.
+- Also produce exactly {illustration_count} short illustration prompts (English, 1-2 sentences each) that describe the key scene for every {PAGES_PER_ILLUSTRATION} pages, in order. Each prompt should describe the setting and action, WITHOUT describing the child's face (a reference photo will handle likeness).
 
 Return ONLY a JSON object exactly like:
 {{
   "cover_title": "A unique, poetic title specific to THIS story — evocative and imaginative (e.g. 'Lila and the Lantern Forest' or 'The Night Kai Saved the Stars'). Never a generic title like '{child_name}\\'s Adventure'.",
   "cover_prompt": "A single cinematic, full-page illustration prompt (2–3 English sentences) for the book cover. Capture the emotional peak or most magical moment of the story. Rich atmosphere, vivid lighting, sense of wonder. Do NOT describe the child's face.",
   "title": "...",
-  "illustration_prompts": ["scene 1", "scene 2", ..., "scene {ILLUSTRATION_COUNT}"],
+  "illustration_prompts": ["scene 1", "scene 2", ..., "scene {illustration_count}"],
   "pages": [
     {{"page": 1, "text": "..."}},
     {{"page": 2, "text": "..."}}
-    // ... {PAGES_PER_BOOK} entries total
+    // ... {pages_per_book} entries total
   ]
 }}"""
 
@@ -283,13 +293,13 @@ Return ONLY a JSON object exactly like:
         raise ValueError("Story JSON missing required keys")
 
     # Normalize
-    pages = data["pages"][:PAGES_PER_BOOK]
-    while len(pages) < PAGES_PER_BOOK:
+    pages = data["pages"][:pages_per_book]
+    while len(pages) < pages_per_book:
         pages.append({"page": len(pages) + 1, "text": f"{child_name} smiled and the adventure continued."})
     data["pages"] = [{"page": i + 1, "text": (p.get("text") or "").strip()} for i, p in enumerate(pages)]
 
-    prompts = data.get("illustration_prompts", [])[:ILLUSTRATION_COUNT]
-    while len(prompts) < ILLUSTRATION_COUNT:
+    prompts = data.get("illustration_prompts", [])[:illustration_count]
+    while len(prompts) < illustration_count:
         prompts.append(f"A whimsical {theme.lower()} scene with a happy child hero.")
     data["illustration_prompts"] = prompts
 
@@ -678,7 +688,7 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
     try:
         story_data = await generate_story_text(
             input.child_name, input.age, input.gender, input.theme, input.story_language,
-            story_prompt=input.story_prompt,
+            story_prompt=input.story_prompt, page_count=input.page_count,
         )
     except Exception as e:
         logging.exception("Background story text generation failed for %s", story_id)
@@ -695,13 +705,15 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
     cover_title = (story_data.get("cover_title") or story_data["title"]).strip()
     cover_prompt_text = (story_data.get("cover_prompt") or story_data["illustration_prompts"][0]).strip()
 
+    illustration_count = len(story_data["illustration_prompts"])
+
     # Generate cover illustration + all story illustrations in one parallel batch
     cover_task = generate_illustration(
         scene_prompt=cover_prompt_text,
         theme=input.theme,
         age=input.age,
         photo_b64=photo_b64,
-        idx=ILLUSTRATION_COUNT,      # unique idx so filename doesn't clash
+        idx=illustration_count,      # unique idx so filename doesn't clash
         visual_style=input.visual_style,
     )
     illustration_tasks = [cover_task] + [
@@ -756,7 +768,7 @@ async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Opt
             "pages": pages,
             "cover_image": cover_img,
             "illustrations_generated": illustrations_generated,
-            "illustrations_expected": ILLUSTRATION_COUNT,
+            "illustrations_expected": illustration_count,
             "narrations_generated": narrations_generated,
             "narrations_expected": len(page_texts),
             "status": "completed",
@@ -789,6 +801,7 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
         "visual_style": input.visual_style,
         "story_language": input.story_language,
         "story_prompt": input.story_prompt or None,
+        "page_count": input.page_count,
         "title": f"{input.child_name}'s Story",
         "pages": [],
         "cover_image": PLACEHOLDER_IMAGE,

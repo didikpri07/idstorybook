@@ -49,7 +49,7 @@ export default function Create() {
   const { language, text } = useLanguage();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en", story_prompt: "" });
+  const [form, setForm] = useState({ child_name: "", age: 5, gender: "", theme: "Moonlit Forest", visual_style: "Classic Watercolor", photo_base64: "", story_language: "en", story_prompt: "", page_count: 24 });
   const [photoName, setPhotoName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -132,7 +132,7 @@ export default function Create() {
         <div className="success-icon"><Check /></div>
         <div className="eyebrow">{text.ready}</div>
         <h1>{text.meet} {form.child_name}'s<br /><em>{text.adventure}</em></h1>
-        <p className="center-sub">{text.readyDescription} {form.child_name}.</p>
+        <p className="center-sub">{text.readyDescription.replace("{n}", form.page_count)} {form.child_name}.</p>
         <Link to={`/storybook/${preview}`} className="btn btn-primary" data-testid="open-storybook-button">
           {text.openStory} <ArrowRight size={17} />
         </Link>
@@ -184,6 +184,19 @@ export default function Create() {
             <label>{text.personality}<select name="gender" value={form.gender} onChange={update} required data-testid="child-gender-select"><option value="">{text.choose}</option><option>{language === "id" ? "Pemberani" : "Adventurous"}</option><option>{language === "id" ? "Penasaran" : "Curious"}</option><option>{language === "id" ? "Imajinatif" : "Imaginative"}</option></select></label>
           </div>
           <label>{text.world}<select name="theme" value={form.theme} onChange={update} data-testid="story-theme-select">{themes.map(theme => <option key={theme.name} value={theme.name}>{language === "id" ? theme.id : theme.name}</option>)}</select></label>
+          <div className="page-count-field">
+            <label>{text.pageCountLabel}
+              <select
+                name="page_count"
+                value={form.page_count}
+                onChange={e => setForm(f => ({ ...f, page_count: Number(e.target.value) }))}
+                data-testid="page-count-select"
+              >
+                {[8, 16, 24, 32].map(n => <option key={n} value={n}>{n} {text.pagesWord}</option>)}
+              </select>
+            </label>
+            <small>{text.pageCountHelper}</small>
+          </div>
           <div className="field-block story-prompt-field">
             <label className="field-label">{text.storyPromptLabel} <span className="optional-tag">{text.storyPromptOptional}</span></label>
             <div className="story-prompt-wrap">

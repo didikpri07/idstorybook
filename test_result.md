@@ -108,6 +108,41 @@ user_problem_statement: >
   photo, story language) BEFORE they log in. Login should trigger when they click the
   generate button ("Create the magic"). After sign-in, the story should generate
   automatically and be linked to the new account (appear in their library).
+  ALSO: add a selectable book length (8, 16, 24, 32 pages) on the create page.
+
+backend:
+  - task: "Selectable book length (page_count 8/16/24/32) in story generation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: >
+          Added page_count to StoryCreate (allowed 8/16/24/32; field_validator defaults any other
+          value to 24). generate_story_text takes page_count and computes illustration_count =
+          ceil(page_count/3), so 8->3, 16->6, 24->8, 32->11 unique illustrations. run_story_generation
+          passes page_count and stores illustrations_expected accordingly; create_story stores
+          page_count on the story doc. Generation is a background task using real AI (~60-90s).
+          TEST: (1) POST /api/stories with page_count=8, poll GET /api/stories/{id} until
+          status=='completed' and assert len(pages)==8 and each page has image+text.
+          (2) POST with page_count=99 -> immediate response.page_count should be 24 (validator).
+          (3) POST with no page_count -> response.page_count should default to 24.
+          Keep the full end-to-end poll to page_count=8 to save time/credits.
+        -working: true
+        -agent: "testing"
+        -comment: >
+          ✅ ALL TESTS PASSED - Tested 3 scenarios for selectable book length feature:
+          (1) page_count=8 full end-to-end: POST /api/stories returned status='processing' and page_count=8.
+          Polled GET /api/stories/{id} until status='completed' (31 seconds). Verified exactly 8 pages,
+          each with non-empty text and image. illustrations_expected=3 (correct: ceil(8/3)=3).
+          (2) page_count=99 validator: POST with invalid page_count=99 correctly defaulted to 24 in immediate response.
+          (3) Missing page_count default: POST without page_count field correctly defaulted to 24.
+          All validation logic working correctly. Background AI generation (Gemini) completed successfully.
+          Feature is production-ready.
 
 frontend:
   - task: "Anonymous access to /create wizard (route now public)"
@@ -193,10 +228,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Anonymous access to /create wizard (route now public)"
-    - "Sign-in gate on generate + form persistence to localStorage"
-    - "Login page contextual 'Almost there!' message when a pending book exists"
-    - "Regression: protected routes /checkout and /dashboard still require login"
+    - "Selectable book length (page_count 8/16/24/32) in story generation"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -204,15 +236,20 @@ test_plan:
 agent_communication:
     -agent: "main"
     -message: >
-      Please test the new anonymous-first create flow (frontend). Auth is Google OAuth only
-      (no static creds — see /app/memory/test_credentials.md), so the post-login resume step
-      likely cannot be automated; if so, mark it untestable and focus on the logged-OUT
-      portions: (1) /create loads for logged-out users with no redirect; (2) filling the form
-      and clicking the generate button navigates to /login AND writes localStorage
-      'idsb_pending_story' containing the entered values (child_name, gender, story_prompt);
-      (3) /login shows 'Almost there!' when that localStorage key is present; (4) regression:
-      /checkout and /dashboard still redirect logged-out users to /login. Base URL is the
-      REACT_APP_BACKEND_URL preview domain.
+      NEW BACKEND TEST NEEDED: Selectable book length. Please test POST /api/stories with
+      page_count=8 and poll GET /api/stories/{id} until status=='completed', then assert the
+      completed story has exactly 8 pages (each with an image + text). Also verify the validator:
+      POST with page_count=99 should return page_count 24 in the immediate response, and POST with
+      no page_count should default to 24. Generation uses real AI (~60-90s) so allow enough poll
+      time (up to ~150s). Keep the full end-to-end poll to page_count=8 only to save credits.
+      Base URL: use REACT_APP_BACKEND_URL from frontend/.env with the /api prefix.
     -agent: "testing"
     -message: >
       ✅ TESTING COMPLETE - All testable scenarios PASSED. Tested 5 scenarios: (1) Anonymous access to /create - PASS: route is public, no redirect, all form fields visible; (2) Sign-in gate + form persistence - PASS: clicking generate navigates to /login, localStorage 'idsb_pending_story' contains all form data (child_name, gender, story_prompt, theme, etc.); (3) Login contextual message - PASS: shows 'Almost there!' heading and 'Your book details are saved' text when pending story exists; (4) Protected routes regression - PASS: /checkout and /dashboard both redirect to /login; (5) Resume-after-login - UNTESTABLE (requires Google OAuth, cannot be automated). Code logic verified for all tasks. Console shows expected 401 errors from auth checks (normal for logged-out state). All critical functionality working correctly. Ready for user acceptance testing of the OAuth flow.
+    -agent: "testing"
+    -message: >
+      ✅ BACKEND TESTING COMPLETE - Selectable book length feature fully tested and PASSED. All 3 test scenarios passed:
+      (1) page_count=8 full end-to-end: Story generated successfully in 31s with exactly 8 pages, each with text+image, illustrations_expected=3 (correct).
+      (2) page_count=99 validator: Invalid value correctly defaulted to 24.
+      (3) Missing page_count: Correctly defaulted to 24.
+      Backend API working perfectly. Feature is production-ready. No issues found.

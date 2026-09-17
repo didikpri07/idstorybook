@@ -22,6 +22,12 @@ high-quality physical printed copy.
 - Parent Accounts: Google Sign-In via Emergent OAuth.
 
 ## What's implemented (as of 2026-08-25)
+- **Selectable Book Length (2026-09-17) — DONE & BACKEND-TESTED**:
+  - New "Book length" picker on the create form: 8, 16, 24 (default), or 32 pages.
+  - Backend: `StoryCreate.page_count` (field_validator defaults any non-8/16/24/32 value to 24). `generate_story_text` sizes the story and computes `illustration_count = ceil(page_count/3)` (8→3, 16→6, 24→8, 32→11 unique illustrations, each shared across 3 pages). `page_count` stored on the story doc.
+  - Frontend: `page_count` in the wizard form + bilingual labels; the "ready" screen text is now page-count aware.
+  - Backend testing agent verified page_count=8 produces exactly 8 pages / 3 illustrations, and the validator defaults 99 and missing → 24.
+
 - **Anonymous-first Create flow (2026-09-17) — DONE**:
   - `/create` is now PUBLIC (removed `ProtectedRoute`). Logged-out parents can fill the entire wizard (name, age, personality, world, story idea, visual style, photo, language) before signing in.
   - On submit while logged out, the full form (incl. photo) is stashed in `localStorage` under `idsb_pending_story` and the parent is sent to `/login`. Large photos are auto-downscaled to fit storage quota.
