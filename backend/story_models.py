@@ -39,6 +39,7 @@ class StoryPublic(BaseModel):
     is_guest: bool = False
     read_only: bool = False
     error: Optional[str] = None
+    billing: Optional[dict] = None
 
 
 class StoryProgress(BaseModel):
@@ -68,3 +69,8 @@ class OrderPublic(BaseModel):
     payment_status: str = ''
     payment_gateway: str = ''
     created_at: str = ''
+    kind: str = 'print'
+    page_count: int = 24
+    amount_minor: Optional[int] = None
+    currency: Optional[str] = None
+    price_snapshot: Optional[dict] = None

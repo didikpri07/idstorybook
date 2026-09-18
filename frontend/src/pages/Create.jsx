@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CloudUpload, SmilePlus, Sun, User, WandSparkles } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
@@ -11,17 +11,22 @@ import { VoicePicker } from "@/components/VoicePicker";
 import { CreateAccountPrompt } from '@/components/CreateAccountPrompt';
 import { clearStoryDraft, DEFAULT_STORY_FORM, prepareStoryPhoto, readStoryDraft, saveStoryDraft } from '@/lib/storyDraft';
 import { API, themes, storyLanguages } from "@/lib/constants";
+import { usePricing } from '@/context/PricingContext';
+import { CreationPrice } from '@/components/CreationPrice';
 
 export default function Create() {
   const { language, text } = useLanguage();
   const { user, loading: authLoading, setUser } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const { prices, region, allowance, refresh, refreshAllowance } = usePricing();
   const [draft] = useState(readStoryDraft);
-  const [form, setForm] = useState(() => ({ ...DEFAULT_STORY_FORM, ...draft?.form }));
+  const [form, setForm] = useState(() => ({ ...DEFAULT_STORY_FORM, ...draft?.form, ...([8, 16, 24, 32].includes(Number(params.get('pages'))) ? { page_count: Number(params.get('pages')) } : {}) }));
   const [photoName, setPhotoName] = useState(draft?.photoName || '');
   const [accountPrompt, setAccountPrompt] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const submitting = useRef(false);
+  const requestId = useRef(crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const update = event => setForm({ ...form, [event.target.name]: event.target.value });
@@ -50,6 +55,7 @@ export default function Create() {
     event.preventDefault();
     if (authLoading || photoLoading || loading || submitting.current) return;
     if (!user) { setAccountPrompt(true); return; }
+    if (!region || !prices || !allowance) { setError(language === 'id' ? 'Pilih negara dan tunggu harga dimuat.' : 'Choose your country and wait for prices to load.'); return; }
     startGeneration(form);
   };
 
@@ -58,11 +64,15 @@ export default function Create() {
     submitting.current = true;
     setLoading(true); setError("");
     try {
-      const response = await axios.post(`${API}/stories`, payload, { timeout: 30000, withCredentials: true });
+      const row = prices.regions[region].prices.find(r => r.pages === Number(payload.page_count));
+      const free = Number(payload.page_count) === 8 && allowance.free_book_available;
+      const response = await axios.post(`${API}/stories`, { ...payload, region, expected_amount: free ? 0 : row.digital, pricing_version: prices.version, request_id: requestId.current }, { timeout: 30000, withCredentials: true });
       clearStoryDraft();
-      navigate(`/storybook/${response.data.id}`);
+      refreshAllowance();
+      navigate(response.data.status === 'awaiting_payment' ? `/payment/${response.data.billing.order_id}` : `/storybook/${response.data.id}`);
     } catch (err) {
       if (err?.response?.status === 401) { setUser(null); setAccountPrompt(true); return; }
+      if (err?.response?.status === 409) { await refresh(); await refreshAllowance(); }
       const detail = err?.response?.data?.detail;
       setError(typeof detail === 'string' ? detail : text.createError);
     } finally { setLoading(false); submitting.current = false; }
@@ -151,8 +161,9 @@ export default function Create() {
             <label>{text.storybook}<select name="story_language" value={form.story_language} onChange={update} data-testid="storybook-language-select">{storyLanguages.map(item => <option value={item.code} key={item.code}>{item.flag} {item.label}</option>)}</select></label>
             <small>{language === "id" ? "Bahasa ini akan digunakan untuk teks buku cerita." : "This language will be used for the story text."}</small>
           </div>
-          <button className="btn btn-primary full" disabled={loading || authLoading || photoLoading} data-testid="generate-story-button">
-            {loading ? <><span className="spinner" /> {text.weaving}</> : <>{!user ? (language === 'id' ? 'Lanjutkan untuk membuat cerita' : 'Continue to create my story') : text.magic} <WandSparkles size={17} /></>}
+          <CreationPrice pages={form.page_count} />
+          <button className="btn btn-primary full" disabled={loading || authLoading || photoLoading || (user && (!prices || !allowance))} data-testid="generate-story-button">
+            {loading ? <><span className="spinner" /> {text.weaving}</> : <>{!user ? (language === 'id' ? 'Lanjutkan untuk membuat cerita' : 'Continue to create my story') : Number(form.page_count) === 8 && allowance?.free_book_available ? (language === 'id' ? 'Buat buku gratis saya' : 'Create my free book') : (language === 'id' ? 'Lanjutkan ke pembayaran' : 'Continue to payment')} <WandSparkles size={17} /></>}
           </button>
           {!user && <small className="guest-limit-note" data-testid="guest-story-limit-note">{language === 'id' ? 'Isi detailnya sekarang. ' : 'Fill in the details now. '}<button type="button" className="inline-signup-button" onClick={() => continueToAccount('signup')} data-testid="create-signup-link">{language === 'id' ? 'Buat akun untuk membuat dan menyimpan ceritamu.' : 'Sign up to create and save your story.'}</button></small>}
           <small className="safe-note">🔒 {text.privacy}</small>

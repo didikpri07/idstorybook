@@ -20,9 +20,6 @@ from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 from emergentintegrations.llm.openai import OpenAITextToSpeech
-from emergentintegrations.payments.stripe.checkout import (
-    StripeCheckout, CheckoutSessionRequest,
-)
 from PIL import Image, ImageDraw
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import JSONResponse
@@ -32,6 +29,11 @@ from generation import generate as generate_with_progress, GOOGLE_VOICES, progre
 from story_access import authorized_story, public_story
 from story_models import StoryPublic, StoryProgress, OrderPublic
 from audio_routes import router as audio_router
+from pricing import router as pricing_router, initialize_pricing
+from region import router as region_router
+from commerce_routes import router as commerce_router
+from billing import prepare_story_billing, create_digital_order, release_unused_free
+from pymongo.errors import DuplicateKeyError
 import secrets
 
 
@@ -76,10 +78,6 @@ MIDTRANS_SNAP_HOST = "https://app.midtrans.com" if MIDTRANS_IS_PRODUCTION else "
 FRONTEND_URL = os.environ['FRONTEND_URL']
 TRUSTED_FRONTEND_ORIGINS = os.environ['TRUSTED_FRONTEND_ORIGINS'].split(',')
 ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()}
-
-# Book prices — defined server-side only, never from frontend
-BOOK_PRICES_USD = {"Hardcover": 34.0, "Softcover": 22.0}
-BOOK_PRICES_IDR = {"Hardcover": 549000, "Softcover": 359000}
 
 # Visual style → AI illustration prompt descriptor
 STYLE_PROMPTS = {
@@ -137,8 +135,12 @@ class StoryCreate(BaseModel):
     photo_base64: Optional[str] = Field(default=None, max_length=14000000)
     story_language: Literal['en', 'id'] = "en"
     story_prompt: Optional[str] = Field(default=None, max_length=300)
-    page_count: int = 24  # 8, 16, 24, or 32
+    page_count: int = 8
     voice_id: Literal['nova', 'onyx', 'shimmer'] = 'nova'
+    region: Literal['ID', 'OTHER'] = 'OTHER'
+    expected_amount: Optional[int] = Field(default=None, ge=0)
+    pricing_version: Optional[int] = Field(default=None, ge=1)
+    request_id: Optional[uuid.UUID] = None
 
     @field_validator("page_count")
     @classmethod
@@ -605,52 +607,6 @@ async def auth_session(request: Request, response: Response):
     return {"user": UserPublic(**user)}
 
 
-# ---------- Payment helpers ----------
-
-async def _midtrans_snap_token(order_id: str, input: OrderCreate, amount_idr: int) -> dict:
-    """Create a Midtrans Snap transaction and return token + redirect_url."""
-    item_name = f"IDStorybook – {input.format} ({input.child_name})"[:50]
-    payload = {
-        "transaction_details": {"order_id": order_id, "gross_amount": amount_idr},
-        "customer_details": {"first_name": input.customer_name, "email": input.email},
-        "item_details": [{"id": input.format.lower(), "price": amount_idr, "quantity": 1, "name": item_name}],
-        "callbacks": {"finish": f"{input.origin_url}/checkout/success?order_id={order_id}"},
-    }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{MIDTRANS_SNAP_HOST}/snap/v1/transactions",
-            json=payload,
-            auth=(MIDTRANS_SERVER_KEY, ""),
-            headers={"Accept": "application/json"},
-        )
-    if resp.status_code not in (200, 201):
-        logging.error("Midtrans Snap error %s: %s", resp.status_code, resp.text)
-        raise HTTPException(502, "Payment service temporarily unavailable. Please try again.")
-    result = resp.json()
-    return {"snap_token": result["token"], "redirect_url": result.get("redirect_url", "")}
-
-
-async def _stripe_checkout_session(order_id: str, input: OrderCreate, amount_usd: float) -> dict:
-    """Create a Stripe Checkout session and return url + session_id."""
-    origin = FRONTEND_URL.rstrip('/')
-    success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&order_id={order_id}"
-    cancel_url = f"{origin}/checkout/cancel?order_id={order_id}"
-
-    stripe_checkout = StripeCheckout(
-        api_key=STRIPE_API_KEY,
-        webhook_url=f"{origin}/api/webhook/stripe",
-    )
-    req = CheckoutSessionRequest(
-        amount=amount_usd,
-        currency="usd",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={"order_id": order_id, "child_name": input.child_name, "format": input.format},
-    )
-    session = await stripe_checkout.create_checkout_session(req)
-    return {"checkout_url": session.url, "session_id": session.session_id}
-
-
 # ---------- Background generation ----------
 
 async def run_story_generation(story_id: str, input: StoryCreate, photo_b64: Optional[str]):
@@ -668,6 +624,12 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
     if not (GEMINI_API_KEY or EMERGENT_LLM_KEY):
         raise HTTPException(503, "Story generation is not configured yet")
     await accounts.rate_limit(request, 'story-create', limit=15)
+    story_id = str(uuid.uuid5(uuid.NAMESPACE_URL, user['user_id'] + str(input.request_id))) if input.request_id else str(uuid.uuid4())
+    existing = await db.stories.find_one({'id': story_id, 'user_id': user['user_id']}, {'_id': 0})
+    if existing:
+        if existing.get('billing'):
+            await create_digital_order(existing, user)
+        return public_story(existing)
     photo_b64 = _strip_data_url(input.photo_base64)
     if photo_b64:
         try:
@@ -682,7 +644,6 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
             photo_b64 = base64.b64encode(buffer.getvalue()).decode()
         except Exception:
             raise HTTPException(422, 'Please use a valid JPG, PNG, or WebP photo under 10 MB.')
-    story_id = str(uuid.uuid4())
     story = {
         "id": story_id,
         "user_id": user["user_id"],
@@ -706,8 +667,20 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
         "stage": "writing",
         "current_page": 1,
     }
-    await db.stories.insert_one({**story})
-    background_tasks.add_task(run_story_generation, story_id, input, photo_b64)
+    free = await prepare_story_billing(story, input, user)
+    try:
+        await db.stories.insert_one({**story})
+    except DuplicateKeyError:
+        existing = await db.stories.find_one({'id': story_id, 'user_id': user['user_id']}, {'_id': 0})
+        if existing:
+            return public_story(existing)
+        raise
+    except Exception:
+        await release_unused_free(story)
+        raise
+    await create_digital_order(story, user)
+    if free:
+        background_tasks.add_task(run_story_generation, story_id, input, photo_b64)
     return public_story(story)
 
 
@@ -717,7 +690,7 @@ async def get_stories(user: dict = Depends(get_current_user)):
     projection = {
         "_id": 0, "id": 1, "child_name": 1, "age": 1, "gender": 1, "theme": 1,
         "story_language": 1, "title": 1, "cover_image": 1, "created_at": 1,
-        "pages.image": 1, "page_count": 1, "status": 1, "voice_id": 1, "narrator_voice": 1,
+        "pages.image": 1, "page_count": 1, "status": 1, "voice_id": 1, "narrator_voice": 1, "billing": 1,
     }
     stories = await db.stories.find({"user_id": user["user_id"]}, projection).sort("created_at", -1).to_list(100)
     lite = []
@@ -738,6 +711,7 @@ async def get_stories(user: dict = Depends(get_current_user)):
             "voice_id": s.get('voice_id', 'nova'),
             "narrator_voice": s.get('narrator_voice', 'nova'),
             "created_at": s.get("created_at"),
+            "billing": s.get('billing'),
         })
     return lite
 
@@ -760,6 +734,11 @@ async def retry_story(story_id: str, request: Request, tasks: BackgroundTasks,
     story, _ = await authorized_story(story_id, request)
     if story.get('user_id') != user['user_id']:
         raise HTTPException(403, 'Save this story to your account before continuing generation.')
+    bill = story.get('billing')
+    if bill and bill.get('kind') == 'paid':
+        paid = await db.orders.find_one({'id': bill.get('order_id'), 'user_id': user['user_id'], 'payment_status': 'paid'}, {'_id': 0, 'id': 1})
+        if not bill.get('authorized') or not paid:
+            raise HTTPException(402, 'Payment must be confirmed before generating this story.')
     await accounts.rate_limit(request, 'story-retry', limit=10)
     result = await db.stories.update_one({'id': story_id, 'status': {'$in': ['partial', 'failed']}},
                                          {'$set': {'status': 'generating', 'error': None}})
@@ -782,74 +761,11 @@ async def share_story(story_id: str, request: Request, user: dict = Depends(get_
     story, _ = await authorized_story(story_id, request)
     if story.get('user_id') != user['user_id']:
         raise HTTPException(403, 'Save this story to your account first.')
+    if story.get('status') == 'awaiting_payment':
+        raise HTTPException(409, 'Create your story before sharing it.')
     token = secrets.token_urlsafe(32)
     await db.stories.update_one({'id': story_id}, {'$set': {'share_token_hash': digest(token)}})
     return {'url': f'{FRONTEND_URL}/storybook/{story_id}?share={token}'}
-
-
-@api_router.get('/payments/config')
-async def payment_config():
-    return {'stripe_enabled': bool(STRIPE_API_KEY), 'midtrans_enabled': bool(MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY)}
-
-
-@api_router.post("/orders")
-async def create_order(input: OrderCreate, request: Request):
-    user = await get_current_user(request)
-    story, _ = await authorized_story(input.story_id, request)
-    if story.get('user_id') != user['user_id']:
-        raise HTTPException(403, 'Save this story to your account before ordering.')
-    if story.get('status', 'completed') not in ('complete', 'completed'):
-        raise HTTPException(409, 'Finish your story before ordering a printed book.')
-    input.origin_url = FRONTEND_URL
-    order_id = str(uuid.uuid4())
-    is_indonesia = input.country.strip().lower() in ("indonesia", "id")
-    gateway = "midtrans" if is_indonesia else "stripe"
-    if is_indonesia and not (MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY):
-        raise HTTPException(503, 'Indonesian print checkout is not available yet. Your story is safely saved.')
-    if not is_indonesia and not STRIPE_API_KEY:
-        raise HTTPException(503, 'Print checkout is not available yet. Your story is safely saved.')
-
-    order = {
-        "id": order_id,
-        "user_id": user["user_id"] if user else None,
-        "story_id": input.story_id,
-        "child_name": input.child_name,
-        "format": input.format,
-        "gift_box": input.gift_box,
-        "customer_name": input.customer_name,
-        "email": input.email,
-        "address": input.address,
-        "city": input.city,
-        "postal_code": input.postal_code,
-        "country": input.country,
-        "status": "Order received",
-        "payment_status": "pending",
-        "payment_gateway": gateway,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.orders.insert_one({**order})
-
-    payment_data: dict = {}
-    try:
-        if is_indonesia:
-            amount_idr = BOOK_PRICES_IDR.get(input.format, BOOK_PRICES_IDR["Hardcover"])
-            payment_data = await _midtrans_snap_token(order_id, input, amount_idr)
-        else:
-            amount_usd = BOOK_PRICES_USD.get(input.format, BOOK_PRICES_USD["Hardcover"])
-            payment_data = await _stripe_checkout_session(order_id, input, amount_usd)
-            await db.orders.update_one(
-                {"id": order_id},
-                {"$set": {"payment_session_id": payment_data["session_id"]}},
-            )
-    except HTTPException:
-        await db.orders.delete_one({'id': order_id})
-        raise
-    except Exception:
-        logging.exception("Payment session creation failed for order %s", order_id)
-        await db.orders.delete_one({"id": order_id})
-        raise HTTPException(502, "Could not start checkout. Please try again.")
-
-    return {**order, "gateway": gateway, **payment_data}
 
 
 @api_router.get("/orders", response_model=List[OrderPublic])
@@ -866,83 +782,15 @@ async def get_admin_orders(user: dict = Depends(get_admin_user)):
 
 @api_router.patch("/orders/{order_id}")
 async def update_order(order_id: str, input: OrderStatusUpdate, user: dict = Depends(get_admin_user)):
+    order = await db.orders.find_one({'id': order_id}, {'_id': 0})
+    if not order:
+        raise HTTPException(404, 'Order not found')
+    if order.get('kind', 'print') != 'print' or order.get('payment_status') != 'paid':
+        raise HTTPException(409, 'Only paid print orders can move into fulfillment.')
     result = await db.orders.update_one({"id": order_id}, {"$set": {"status": input.status}})
     if not result.matched_count:
         raise HTTPException(404, "Order not found")
     return {"id": order_id, "status": input.status}
-
-
-# ---------- Stripe webhook (Flow B) ----------
-@api_router.post("/webhook/stripe")
-async def stripe_webhook(request: Request):
-    body = await request.body()
-    sig = request.headers.get("stripe-signature", "")
-    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY)
-    try:
-        event = await stripe_checkout.handle_webhook(body, sig)
-    except Exception:
-        logging.exception("Stripe webhook handling error")
-        raise HTTPException(400, "Invalid webhook payload")
-
-    if event.payment_status == "paid":
-        order_id = (event.metadata or {}).get("order_id", "")
-        if order_id:
-            await db.orders.update_one(
-                {"id": order_id, "payment_status": {"$ne": "paid"}},
-                {"$set": {
-                    "payment_status": "paid",
-                    "payment_session_id": event.session_id,
-                    "status": "Order received",
-                }},
-            )
-    return {"status": "ok"}
-
-
-# ---------- Midtrans notification ----------
-@api_router.post("/payments/midtrans/notification")
-async def midtrans_notification(request: Request):
-    n = await request.json()
-
-    # Validate signature: sha512(order_id + status_code + gross_amount + server_key)
-    raw = f"{n.get('order_id')}{n.get('status_code')}{n.get('gross_amount')}{MIDTRANS_SERVER_KEY}"
-    expected = hashlib.sha512(raw.encode()).hexdigest()
-    if not hmac.compare_digest(expected, n.get("signature_key", "")):
-        raise HTTPException(403, "Invalid notification signature")
-
-    order_id = n.get("order_id", "")
-    txn_status = n.get("transaction_status", "")
-    fraud_status = (n.get("fraud_status") or "").lower()
-
-    if txn_status == "settlement" or (txn_status == "capture" and fraud_status in ("", "accept")):
-        new_status = "paid"
-    elif txn_status == "pending":
-        new_status = "pending"
-    elif txn_status in ("cancel", "deny", "expire"):
-        new_status = "failed"
-    else:
-        new_status = "pending"
-
-    # Only advance status (paid/failed cannot be downgraded to pending)
-    RANK = {"pending": 0, "paid": 10, "failed": 10}
-    order = await db.orders.find_one({"id": order_id}, {"payment_status": 1})
-    if order and RANK.get(new_status, 0) >= RANK.get(order.get("payment_status", "pending"), 0):
-        await db.orders.update_one(
-            {"id": order_id},
-            {"$set": {"payment_status": new_status}},
-        )
-    return {"status": "ok"}
-
-
-# ---------- Payment status polling ----------
-@api_router.get("/payments/status/{order_id}")
-async def get_payment_status(order_id: str, user: dict = Depends(get_current_user)):
-    order = await db.orders.find_one(
-        {"id": order_id, "user_id": user['user_id']},
-        {"_id": 0, "id": 1, "payment_status": 1, "status": 1, "payment_gateway": 1},
-    )
-    if not order:
-        raise HTTPException(404, "Order not found")
-    return order
 
 
 @api_router.post("/status", response_model=StatusCheck)
@@ -967,6 +815,9 @@ async def get_status_checks():
 # Include the router in the main app
 app.include_router(accounts_router)
 app.include_router(audio_router)
+app.include_router(pricing_router)
+app.include_router(region_router)
+app.include_router(commerce_router)
 app.include_router(api_router)
 
 app.add_middleware(SessionMiddleware, secret_key=os.environ['OAUTH_STATE_SECRET'],
@@ -1005,6 +856,7 @@ async def on_startup():
     from migrate_legacy import migrate
     from pymongo.errors import OperationFailure
     await migrate()
+    await initialize_pricing()
     await db.guest_sessions.create_index('guest_id', unique=True)
     await db.stories.create_index([('user_id', 1), ('created_at', -1)])
     await db.stories.create_index('id', unique=True)

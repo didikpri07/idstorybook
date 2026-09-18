@@ -1,0 +1,49 @@
+{
+  "summary": "Completed focused backend+frontend verification for regional pricing, admin pricing controls, paid/free gating, idempotency, print quote snapshots, and pricing/create/payment UI integration on public URL. Added new reusable pytest suite and restored exact default 24-price table after admin-edit tests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Home hero",
+        "issue": "Key hero heading did not expose expected stable data-testid used by automation smoke check, reducing testability consistency.",
+        "selector": "[data-testid='hero-title']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_iteration4_regional_pricing_payments.py",
+    "/app/tests/restore_pricing_defaults.py",
+    "/app/test_reports/pytest/pytest_results_iteration4.xml"
+  ],
+  "action_items": [
+    "Run remaining CRITICAL provider-isolation suite not covered in this pass (Midtrans signature edge-cases, Stripe webhook reorder/duplicate/refund races, callback payload tamper matrix).",
+    "Run dedicated E2E for Stripe hosted checkout success/cancel-resume path (at most one small test charge), including library awaiting-payment badge transitions.",
+    "Optionally add/standardize data-testid for homepage hero primary heading to keep smoke tests deterministic."
+  ],
+  "critical_code_review_comments": [
+    "server.py is very large (>700 lines), violating maintainability guideline; split by domain modules to reduce regression risk.",
+    "payments.py enforces provider-authoritative reconciliation and metadata checks correctly for covered paths; no direct callback-trust bypass detected in covered tests.",
+    "Admin pricing optimistic-version conflict + audit update flow works in covered API checks; values restoration succeeded."
+  ],
+  "updated_files": [
+    "/app/tests/test_iteration4_regional_pricing_payments.py",
+    "/app/tests/restore_pricing_defaults.py",
+    "/app/test_reports/iteration_4.json"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 targeted tests)",
+    "frontend": "92% (targeted flows passed; one low-priority testability gap)"
+  },
+  "test_credentials": "Used /app/memory/test_credentials.md durable QA account (phase2.qa@example.com).",
+  "seed_data_creation": "Created and auto-cleaned isolated TEST_IT4 users/stories/orders via pytest fixtures; temporary admin restore account cleaned. No durable customer/QA book deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Public URL checks done: /pricing region switch, no stale $22/$34 text, /create?pages query selection, guest gating modal, QA login to pending payment fixture dig_597e7fba724a5d68adc7d8e5cc6e65fe showing $1.95 Stripe test review, and mobile390 pricing→create navigation. Backend targeted suite is reusable at /app/tests/test_iteration4_regional_pricing_payments.py. Default pricing table was explicitly restored to exact requested values after admin mutation test.",
+  "rca of the issue": "No functional backend/frontend defects found in covered scope. One low-priority RCA: initial smoke script failed due missing expected hero data-testid rather than runtime failure; app loaded correctly and subsequent DOM/data-testid checks passed."
+}

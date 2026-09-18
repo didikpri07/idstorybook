@@ -1,6 +1,8 @@
 # IDStorybook — Feature Expansion (Phase 2)
 
 ## Original problem statement
+**Current commerce policy (2026-09-18):** One free8-page digital book per parent account; paid generation begins only after provider confirmation. Indonesia uses production Midtrans; other countries use existing Stripe test mode. Automatic country detection with manual correction. Printed price is additional to digital purchase, PDF always free. Admin-editable regional pricing supersedes the earlier speculative pricing guidance below.
+
 **Current policy update (supersedes the original one-free-guest-story requirement):** Guests may fill the entire creation form, but must sign up or sign in before any story generation or generation retry. Details/photo should survive the authentication detour. Existing guest books remain claimable after authentication.
 
 Build on the existing IDStorybook codebase (React + Tailwind frontend, FastAPI backend, MongoDB) to add the four highest-impact features for user retention and experience.
@@ -152,3 +154,32 @@ Initial hypothesis: digital single book Rp49,000–79,000; longer books priced h
 - Fixed preview instrumentation warning in VoicePicker by rendering each option as one text expression (no nested span). Verified rendered options contain no spans.
 - Closed final test gap with real backend logout while the create page still held the previous user: next submission returned401, opened signup/sign-in prompt, and retained name/settings/photo; actual re-login returned to the filled form without starting generation.
 - Modal appearance verified after animation: opaque white, readable text, existing brand styling. All core requested behaviors verified; final regression/build results recorded separately.
+
+## Regional payments and editable pricing — 2026-09-18
+### Original user request (credentials omitted from documentation)
+Apply supplied Gemini API key, Stripe publishable key, admin email didik.digital@gmail.com, and Midtrans client/server keys. For visitors from Indonesia, use Midtrans: first digital8-page book free; digital8/16/24/32 costs Rp15,000/25,000/39,000/49,000; PDF all free; softcover Rp100,000/200,000/340,000/440,000; hardcover Rp150,000/250,000/390,000/490,000. For other countries use Stripe: first digital8-page free; digital$1/$1.95/$2.95/$3.95; PDF all free; softcover$10/$18/$25/$32; hardcover$15/$25/$39/$49. Allow admin to modify pricing and create a public pricing page/section.
+### Explicit choices
+- Detect country automatically, with manual correction.
+- Midtrans keys are PRODUCTION/real payments.
+- Paid story generation starts after payment confirmation; first eligible8-page story free.
+- Printed prices are additional to the digital price.
+- User informed supplied Stripe pk_live key is publishable-only and available Stripe configuration stays TEST; do not mix modes or ask for a server Stripe key.
+### Implementation
+- Added `pricing.py` versioned MongoDB IDR-integer/USD-cent catalog with exact24price entries, public GET and admin PUT, validation, audit history, and optimistic version conflict handling.
+- Added `billing.py` account-atomic free-book reservation, immutable story/order quotes, pre-payment blocked generation, and atomic paid authorization/task scheduling. Retries reuse authorized book/checkpoints; old books remain accessible. Existing free8-page books count toward allowance.
+- Added `region.py` server IP country lookup (no precise geolocation), manual correction in UI, one-hour hashed-IP cache and graceful manual fallback.
+- Added `payments.py` / `commerce_routes.py`: separate print/digital orders, resumable hosted checkout, frozen price/version snapshots, validated amounts/currency/metadata, checkout locks/idempotency, signed Midtrans notifications + authoritative GET status, Stripe webhook lookup/verification, owner-only status and payment access. Paid callbacks cannot launch generation twice. Only paid print orders enter fulfillment.
+- Existing Stripe adapter is necessary because injected test credential is its alias, not a direct Stripe secret. Initial directSDK test failed401; restored adapter-configured gateway with full SDK response to retain idempotency/livemode fields. Actual $1.95 test checkout now returns200/sessionURL; pending status retrieval verifies amount/currency/metadata.
+- Applied supplied secrets server-side only. Gemini retained unchanged. Midtrans production hosts configured; read-only status check returned provider404 for a nonexistent order, proving authentication accepted without creating a live transaction.
+- Admin address was not registered: reserved an admin account with a one-use24-hour password setup link stored privately under `/root/storybook-tests/admin_setup.json`. Public signup cannot claim the administrator address. No admin password is guessed/hardcoded.
+- `/pricing` displays exact digital/print tables, first-free offer, free PDF, region switch and book-length links; `/admin/pricing` editable prices; `/payment/:orderId` payment review/confirmation; create form shows current/free price and waits for confirmed payment; checkout derives print price from actual owned story page count; library displays payment-required stories and unpaid print orders honestly.
+- Existing design, narration, read-along, PDF, privacy and signup-required flow preserved. One-time payments only, no subscriptions. No additional shipping/tax fees introduced; requested totals used exactly.
+### Verification in progress
+- External GET pricing/config/region correct; country detectedUS. Browser IDR/USD switching and pricing-page-to-create page length/amount passed. Production frontend build succeeded with two hook warnings, subsequently fixed.
+- QA pending digital16-page story `597e7fba-724a-5d68-adc7-d8e5cc6e65fe`, order `dig_597e7fba724a5d68adc7d8e5cc6e65fe`, owned by existing QA parent. Created awaiting_payment; no generation started. Stripe TEST session created successfully. Preserve or clean only this test fixture as needed, not the primary real Maya book.
+### Remaining setup / backlog
+- User sets admin password via private one-time link; sign in to `/admin/pricing`.
+- Merchant configures Midtrans notification URL as documented; browser return polling also independently verifies payment. No real Midtrans purchase should be automated by tests.
+- Stripe international checkout remains TEST because provided Stripe key is publishable-only. No real Stripe payments enabled.
+- Google OAuth and Resend credentials still absent from earlier phase; no change to those integrations.
+- Future scaling: durable external worker/leases across multiple app replicas, tax/shipping rules if requested, transactional outbox. Current single-process background task restart becomes retryable partial.

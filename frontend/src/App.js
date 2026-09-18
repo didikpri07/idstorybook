@@ -9,7 +9,6 @@ import Home from "@/pages/Home";
 import Create from "@/pages/Create";
 import StorybookPage from "@/pages/Storybook";
 import Checkout from "@/pages/Checkout";
-import CheckoutSuccess from "@/pages/CheckoutSuccess";
 import CheckoutCancel from "@/pages/CheckoutCancel";
 import Dashboard from "@/pages/Dashboard";
 import Admin from "@/pages/Admin";
@@ -17,6 +16,11 @@ import Login from "@/pages/Login";
 import AuthCallback from "@/pages/AuthCallback";
 import PasswordReset from "@/pages/PasswordReset";
 import "@/Phase2.css";
+import "@/Pricing.css";
+import Pricing from '@/pages/Pricing';
+import AdminPricing from '@/pages/AdminPricing';
+import Payment from '@/pages/Payment';
+import { PricingProvider } from '@/context/PricingContext';
 
 function AppRouter() {
   const location = useLocation();
@@ -29,12 +33,15 @@ function AppRouter() {
       <Route path="/forgot-password" element={<PasswordReset />} />
       <Route path="/reset-password" element={<PasswordReset />} />
       <Route path="/create" element={<Create />} />
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/payment/:orderId" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
       <Route path="/storybook/:id" element={<StorybookPage />} />
       <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-      <Route path="/checkout/success" element={<CheckoutSuccess />} />
+      <Route path="/checkout/success" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
       <Route path="/checkout/cancel" element={<CheckoutCancel />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+      <Route path="/admin/pricing" element={<AdminRoute><AdminPricing /></AdminRoute>} />
     </Routes>
   );
 }
@@ -44,7 +51,7 @@ export default function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
-          <AppRouter />
+          <PricingProvider><AppRouter /></PricingProvider>
         </AuthProvider>
       </BrowserRouter>
     </div>

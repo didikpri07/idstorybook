@@ -5,7 +5,7 @@ const MAX_DRAFT_AGE = 2 * 60 * 60 * 1000;
 export const DEFAULT_STORY_FORM = {
   child_name: '', age: 5, gender: '', theme: 'Moonlit Forest',
   visual_style: 'Classic Watercolor', photo_base64: '', story_language: 'en',
-  story_prompt: '', page_count: 24, voice_id: 'nova',
+  story_prompt: '', page_count: 8, voice_id: 'nova',
 };
 
 export function readStoryDraft() {

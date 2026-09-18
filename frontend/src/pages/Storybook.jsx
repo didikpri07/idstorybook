@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, BookOpen, Box, Check, ChevronLeft, ChevronRight, FileDown, Pause, Play, Share2, Volume2, VolumeX } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
@@ -238,6 +238,7 @@ export default function Storybook() {
 
   if (error) return <Shell><div className="center-page"><div className="error-message" role="alert" data-testid="storybook-error-message">{error}</div><Link to={`/login?next=${encodeURIComponent(`/storybook/${id}`)}`} className="btn btn-primary" data-testid="story-login-link">{text.signIn}</Link></div></Shell>;
   if (!story) return <Shell><div className="center-page"><span className="spinner" /><p>{text.storyLoading}</p></div></Shell>;
+  if (story.status === 'awaiting_payment' && story.billing?.order_id && !story.read_only) return <Navigate to={`/payment/${story.billing.order_id}`} replace />;
   if (['processing', 'generating'].includes(story.status)) return <Shell><GenerationProgress storyId={id} childName={story.child_name} onReady={loadStory} /></Shell>;
   const partial = ['partial', 'failed'].includes(story.status);
   const partialBanner = partial && <section className="partial-banner" data-testid="partial-story-banner"><div><strong data-testid="partial-story-title">{language === 'id' ? 'Keajaibannya dijeda, bukan hilang.' : 'A little pause. No magic lost.'}</strong><p data-testid="partial-story-description">{language === 'id' ? `${story.pages.filter(p => p.complete || (p.image && p.audio)).length} dari ${story.page_count} halaman selesai. Kemajuanmu tersimpan.` : `${story.pages.filter(p => p.complete || (p.image && p.audio)).length} of ${story.page_count} pages complete. Your progress is saved.`}</p></div>{!story.read_only && !story.is_guest && <Button className="btn btn-primary" onClick={retry} disabled={retrying} data-testid="retry-remaining-pages-button">{retrying ? <span className="spinner" /> : (language === 'id' ? 'Coba lagi halaman tersisa' : 'Retry remaining pages')}</Button>}</section>;

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BookOpen, Check, Languages, LayoutDashboard, LogOut, Package } from "lucide-react";
+import { BookOpen, Check, Languages, LayoutDashboard, LogOut, Package, Tags, Settings } from "lucide-react";
 import { languages, useLanguage } from "@/i18n";
 import { useAuth } from "@/context/AuthContext";
 
@@ -32,6 +32,7 @@ function LanguagePanel({ language, setLanguage, text }) {
 }
 
 function UserMenu({ user, logout, text }) {
+  const { language } = useLanguage();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -52,6 +53,8 @@ function UserMenu({ user, logout, text }) {
         <div className="user-menu-drop" data-testid="user-dropdown">
           <div className="user-menu-email">{user.email}</div>
           <Link to="/dashboard" onClick={() => setOpen(false)} className="mobile-library-link" data-testid="user-menu-library"><LayoutDashboard size={15} />{text.library}</Link>
+          <Link to="/pricing" onClick={() => setOpen(false)} className="mobile-library-link" data-testid="user-menu-pricing"><Tags size={15} />{language === 'id' ? 'Harga' : 'Pricing'}</Link>
+          {user.role === 'admin' && <Link to="/admin/pricing" onClick={() => setOpen(false)} className="mobile-library-link" data-testid="user-menu-admin-pricing"><Settings size={15} />{language === 'id' ? 'Kelola harga' : 'Manage prices'}</Link>}
           <button onClick={() => { logout(); setOpen(false); }} data-testid="logout-button">
             <LogOut size={15} /> {text.signOut}
           </button>
@@ -75,8 +78,10 @@ export function Shell({ children }) {
         <nav>
           <Link to="/dashboard" data-testid="nav-dashboard"><LayoutDashboard size={16} /> {text.library}</Link>
           <Link to="/dashboard#orders" data-testid="nav-orders"><Package size={16} /> {text.orders}</Link>
+          <Link to="/pricing" data-testid="nav-pricing"><Tags size={16} />{language === 'id' ? 'Harga' : 'Pricing'}</Link>
         </nav>
         <div className="topbar-right">
+          <Link to="/pricing" className="nav-pricing-mobile" data-testid="mobile-nav-pricing">{language === 'id' ? 'Harga' : 'Pricing'}</Link>
           <LanguagePanel language={language} setLanguage={setLanguage} text={text} />
           {!loading && (user
             ? <UserMenu user={user} logout={logout} text={text} />

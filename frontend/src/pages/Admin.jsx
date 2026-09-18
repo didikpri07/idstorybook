@@ -4,20 +4,22 @@ import axios from "axios";
 import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
 import { API } from "@/lib/constants";
+import { Link } from 'react-router-dom';
 
 export default function Admin() {
   const { text, language } = useLanguage();
   const [orders, setOrders] = useState([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     axios.get(`${API}/admin/orders`, { withCredentials: true })
-      .then(response => setOrders(response.data))
-      .catch(err => console.error("Admin orders load failed:", err));
-  }, []);
+      .then(response => setOrders(response.data.filter(o => o.kind !== 'digital')))
+      .catch(() => setError(language === 'id' ? 'Pesanan belum dapat dimuat.' : 'Orders could not be loaded.'));
+  }, [language]);
 
   const change = async (order, status) => {
-    await axios.patch(`${API}/orders/${order.id}`, { status }, { withCredentials: true });
-    setOrders(orders.map(item => item.id === order.id ? { ...item, status } : item));
+    try { await axios.patch(`${API}/orders/${order.id}`, { status }, { withCredentials: true }); setOrders(orders.map(item => item.id === order.id ? { ...item, status } : item)); setError(''); }
+    catch (e) { setError(typeof e.response?.data?.detail === 'string' ? e.response.data.detail : 'Could not update this order.'); }
   };
 
   const statusLabels = language === "id"
@@ -32,8 +34,9 @@ export default function Admin() {
             <div className="eyebrow"><Package size={14} /> {text.adminEyebrow}</div>
             <h1>{text.printA} <em>{text.printB}</em></h1>
           </div>
-          <span className="admin-badge">{text.adminView}</span>
+          <Link to="/admin/pricing" className="btn btn-primary" data-testid="admin-manage-prices">{language === 'id' ? 'Kelola harga' : 'Manage prices'}</Link>
         </div>
+        {error && <div className="error-message" role="alert" data-testid="admin-orders-error">{error}</div>}
         <div className="metric-row">
           <div><span>{text.incoming}</span><b>{orders.length}</b></div>
           <div><span>{text.production}</span><b>{orders.filter(o => o.status === "In production").length}</b></div>
@@ -45,11 +48,11 @@ export default function Admin() {
             <div className="table-row" key={order.id} data-testid={`admin-order-${order.id}`}>
               <div><b>{order.customer_name}</b><small>{order.email}</small></div>
               <span>{order.format === "Hardcover" ? text.hardcover : text.softcover}</span>
-              <select value={order.status} onChange={e => change(order, e.target.value)} data-testid={`order-status-${order.id}`}>
+              {order.payment_status === 'paid' ? <select value={order.status} onChange={e => change(order, e.target.value)} data-testid={`order-status-${order.id}`}>
                 <option value="Order received">{statusLabels.received}</option>
                 <option value="In production">{statusLabels.production}</option>
                 <option value="Shipped">{statusLabels.shipped}</option>
-              </select>
+              </select> : <span data-testid={`order-payment-status-${order.id}`}>{order.payment_status === 'failed' ? (language === 'id' ? 'Pembayaran gagal' : 'Payment failed') : order.payment_status === 'refunded' ? (language === 'id' ? 'Dana dikembalikan' : 'Refunded') : (language === 'id' ? 'Menunggu pembayaran' : 'Awaiting payment')}</span>}
             </div>
           )) : <div className="empty-order">{text.newOrders}</div>}
         </section>

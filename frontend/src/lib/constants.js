@@ -1,6 +1,3 @@
-export const MIDTRANS_CLIENT_KEY = process.env.REACT_APP_MIDTRANS_CLIENT_KEY || "";
-export const MIDTRANS_IS_PRODUCTION = process.env.REACT_APP_MIDTRANS_IS_PRODUCTION === "true";
-export const BOOK_PRICES = { Hardcover: { usd: "$34.00", idr: "Rp 549.000" }, Softcover: { usd: "$22.00", idr: "Rp 359.000" } };
 export const COUNTRIES = ["Australia", "Canada", "Germany", "Indonesia", "Malaysia", "Netherlands", "New Zealand", "Philippines", "Singapore", "United Kingdom", "United States", "Other"];
 
 export const VISUAL_STYLES = [
@@ -34,19 +31,3 @@ export const COVER_THEMES = {
   "Dinosaur Valley": { bg: "linear-gradient(155deg,#14532d 0%,#15803d 55%,#713f12 100%)", spine: "#0a321b", accent: "#86efac", star: "◈", emoji: "🦕" },
 };
 
-export function loadMidtransSnap() {
-  return new Promise((resolve, reject) => {
-    if (window.snap) { resolve(window.snap); return; }
-    const existing = document.getElementById("midtrans-snap-js");
-    if (existing) { existing.onload = () => resolve(window.snap); return; }
-    const s = document.createElement("script");
-    s.id = "midtrans-snap-js";
-    s.src = MIDTRANS_IS_PRODUCTION
-      ? "https://app.midtrans.com/snap/snap.js"
-      : "https://app.sandbox.midtrans.com/snap/snap.js";
-    s.setAttribute("data-client-key", MIDTRANS_CLIENT_KEY);
-    s.onload = () => resolve(window.snap);
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}

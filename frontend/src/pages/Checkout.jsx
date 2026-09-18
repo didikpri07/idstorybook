@@ -1,47 +1,61 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Crown, Heart } from "lucide-react";
 import axios from "axios";
 import { useLanguage } from "@/i18n";
 import { Shell } from "@/components/Shell";
-import { API, BOOK_PRICES, COUNTRIES, loadMidtransSnap } from "@/lib/constants";
+import { API, COUNTRIES } from "@/lib/constants";
+import { usePricing, formatMoney } from '@/context/PricingContext';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Checkout() {
   const { text, language } = useLanguage();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { prices, region, setRegion, refresh } = usePricing();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [format, setFormat] = useState("Hardcover");
-  const [country, setCountry] = useState("Other");
+  const [country, setCountry] = useState(region === 'ID' ? 'Indonesia' : region ? 'Other' : '');
+  const [story, setStory] = useState(null);
+  const countryEdited = useRef(false);
+  const requestId = useRef(crypto.randomUUID());
+  const submitting = useRef(false);
   const [paymentConfig, setPaymentConfig] = useState(null);
-  const [form, setForm] = useState({ customer_name: "", email: "", address: "", city: "", postal_code: "" });
+  const [form, setForm] = useState({ customer_name: user?.name || '', email: user?.email || '', address: "", city: "", postal_code: "" });
   const update = e => setForm({ ...form, [e.target.name]: e.target.value });
   const isIndonesia = country === "Indonesia";
-  const price = BOOK_PRICES[format] || BOOK_PRICES.Hardcover;
-  const displayPrice = isIndonesia ? price.idr : price.usd;
+  const table = prices?.regions[isIndonesia ? 'ID' : 'OTHER'];
+  const row = table?.prices.find(r => r.pages === story?.page_count);
+  const amount = row?.[format.toLowerCase()];
+  const displayPrice = amount !== undefined && country ? formatMoney(amount, table.currency) : '—';
   const unavailable = paymentConfig && !(isIndonesia ? paymentConfig.midtrans_enabled : paymentConfig.stripe_enabled);
   useEffect(() => { axios.get(`${API}/payments/config`).then(r => setPaymentConfig(r.data)).catch(() => setPaymentConfig({})); }, []);
+  useEffect(() => { if (!countryEdited.current && region) setCountry(region === 'ID' ? 'Indonesia' : 'Other'); }, [region]);
+  useEffect(() => {
+    const storyId = params.get('story_id');
+    if (!storyId) { setError(language === 'id' ? 'Pilih buku dari perpustakaanmu terlebih dahulu.' : 'Choose a book from your library first.'); return; }
+    let active = true;
+    axios.get(`${API}/stories/${storyId}`).then(({ data }) => {
+      if (!active) return;
+      if (!['complete', 'completed'].includes(data.status)) { setError(language === 'id' ? 'Selesaikan ceritamu sebelum memesan cetak.' : 'Finish your story before ordering a printed book.'); return; }
+      setStory(data);
+    }).catch(() => { if (active) setError(language === 'id' ? 'Buku tidak ditemukan di akunmu.' : 'This book was not found in your account.'); });
+    return () => { active = false; };
+  }, [params, language]);
 
   const submit = async e => {
-    e.preventDefault(); setError(""); setLoading(true);
+    e.preventDefault(); if (submitting.current || !story || !row || !country) return;
+    submitting.current = true; setError(""); setLoading(true);
     try {
-      const payload = { ...form, story_id: params.get("story_id") || "demo", child_name: params.get("child_name") || "Story friend", format, gift_box: false, country, origin_url: window.location.origin };
+      const payload = { ...form, story_id: story.id, format, country, expected_amount: amount, pricing_version: prices.version, request_id: requestId.current };
       const { data } = await axios.post(`${API}/orders`, payload, { timeout: 20000, withCredentials: true });
-      if (data.gateway === "stripe") { window.location.href = data.checkout_url; }
-      else if (data.gateway === "midtrans") {
-        const snap = await loadMidtransSnap();
-        setLoading(false);
-        snap.pay(data.snap_token, {
-          onSuccess: () => { window.location.href = `/checkout/success?order_id=${data.id}`; },
-          onPending: () => { window.location.href = `/checkout/success?order_id=${data.id}&pending=1`; },
-          onError: () => setError(text.orderError),
-          onClose: () => setError(""),
-        });
-      }
+      navigate(`/payment/${data.id}`);
     } catch (err) {
+      if (err.response?.status === 409) await refresh();
       setError(typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : text.orderError);
-      setLoading(false);
-    }
+    } finally { setLoading(false); submitting.current = false; }
   };
 
   return (
@@ -51,6 +65,7 @@ export default function Checkout() {
           <div className="eyebrow" data-testid="checkout-eyebrow">{text.printOrders}</div>
           <h1 data-testid="checkout-title">{text.checkoutTitleA}<br /><em>{text.checkoutTitleB}</em></h1>
           <p data-testid="checkout-description">{text.checkoutDescription}</p>
+          {story && <p data-testid="checkout-book-details">{story.title} · {story.page_count} {language === 'id' ? 'halaman' : 'pages'}</p>}
           <div className="format-cards format-options">
             {["Hardcover", "Softcover"].map(f => (
               <button
@@ -70,6 +85,7 @@ export default function Checkout() {
             <b>{displayPrice}</b>
           </div>
           <small data-testid="checkout-payment-provider">{isIndonesia ? 'Midtrans' : 'Stripe · Test mode'}</small>
+          <p className="creation-price-note" data-testid="print-additional-note">{language === 'id' ? 'Harga cetak terpisah dari pembelian buku digital. Unduhan PDF tetap gratis.' : 'Print price is additional to your digital purchase. PDF downloads remain free.'}</p>
         </div>
         <form className="checkout-form" onSubmit={submit} data-testid="checkout-form">
           {error && <div className="error-message" role="alert" data-testid="checkout-error">{error}</div>}
@@ -82,11 +98,12 @@ export default function Checkout() {
             <label>{text.postal}<input name="postal_code" value={form.postal_code} onChange={update} required data-testid="customer-postal-input" /></label>
           </div>
           <label>{text.country}
-            <select value={country} onChange={e => setCountry(e.target.value)} data-testid="customer-country-select">
+            <select value={country} required onChange={e => { countryEdited.current = true; setCountry(e.target.value); setRegion(e.target.value === 'Indonesia' ? 'ID' : 'OTHER'); }} data-testid="customer-country-select">
+              <option value="" disabled>{language === 'id' ? 'Pilih negara' : 'Choose your country'}</option>
               {COUNTRIES.map(c => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <button className="btn btn-primary full" disabled={loading || !paymentConfig || unavailable} data-testid="place-order-button">
+          <button className="btn btn-primary full" disabled={loading || !paymentConfig || unavailable || !story || !row || !country} data-testid="place-order-button">
             {loading ? <><span className="spinner" /> {text.paymentProcessing}</> : <>{text.placeOrder} · {displayPrice}</>}
           </button>
         </form>

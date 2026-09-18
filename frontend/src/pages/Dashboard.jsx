@@ -19,7 +19,7 @@ export default function Dashboard() {
     const load = async () => {
       try {
         const [sr, or] = await Promise.all([axios.get(`${API}/stories`), axios.get(`${API}/orders`)]);
-        if (active) { setStories(sr.data); setOrders(or.data); setError(''); }
+        if (active) { setStories(sr.data); setOrders(or.data.filter(o => o.kind !== 'digital')); setError(''); }
       } catch { if (active) setError(language === 'id' ? 'Perpustakaan belum dapat dimuat.' : 'Your library could not be loaded. Please refresh.'); }
       finally { if (active) { setLoading(false); timer = setTimeout(load, 10000); } }
     };
@@ -38,10 +38,11 @@ export default function Dashboard() {
         <div className="story-card-body"><b data-testid={`story-title-${story.id}`}>{story.title}</b><small data-testid={`story-meta-${story.id}`}>{story.child_name} · {story.page_count} {text.pagesWord}</small>
           {['processing', 'generating'].includes(story.status) && <span className="story-status" data-testid={`story-generating-${story.id}`}>{language === 'id' ? 'Sedang dibuat…' : 'Being created…'}</span>}
           {['partial', 'failed'].includes(story.status) && <span className="story-status" data-testid={`story-partial-${story.id}`}>{language === 'id' ? 'Dijeda · Lanjutkan cerita' : 'Paused · Continue your story'}</span>}
+          {story.status === 'awaiting_payment' && <span className="story-status" data-testid={`story-awaiting-payment-${story.id}`}>{language === 'id' ? 'Menunggu pembayaran · Lanjutkan' : 'Awaiting payment · Continue'}</span>}
         </div><ArrowRight size={17} /></Link>)}</div> : !error && <div className="empty-state" data-testid="empty-stories"><BookOpen size={32} /><b>{text.firstWaiting}</b><Link to="/create" className="btn btn-primary" data-testid="start-creating-button">{text.startCreating}<ArrowRight size={16} /></Link></div>}
     </section>
     <section className="orders-section" id="orders"><div className="section-heading"><h2 data-testid="library-orders-heading">{text.printOrders}</h2><span data-testid="library-order-count">{orders.length} {text.ordersCount}</span></div>
-      {orders.length ? orders.map(order => <div className="order-row" key={order.id} data-testid={`order-row-${order.id}`}><span className="order-icon"><Package size={18} /></span><div><b data-testid={`order-title-${order.id}`}>{order.format === 'Hardcover' ? text.hardcover : text.softcover} · {order.child_name}</b><small data-testid={`order-city-${order.id}`}>{order.city}</small></div><span className="status-pill" data-testid={`order-status-${order.id}`}>{order.status === 'Shipped' ? text.shipped : order.status === 'In production' ? text.production : text.orderReceived}</span></div>) : !loading && <div className="empty-order" data-testid="empty-orders">{text.noOrders}</div>}
+      {orders.length ? orders.map(order => <div className="order-row" key={order.id} data-testid={`order-row-${order.id}`}><span className="order-icon"><Package size={18} /></span><div><b data-testid={`order-title-${order.id}`}>{order.format === 'Hardcover' ? text.hardcover : text.softcover} · {order.child_name}</b><small data-testid={`order-city-${order.id}`}>{order.city}</small></div>{order.payment_status === 'paid' ? <span className="status-pill" data-testid={`order-status-${order.id}`}>{order.status === 'Shipped' ? text.shipped : order.status === 'In production' ? text.production : text.orderReceived}</span> : <Link to={`/payment/${order.id}`} className="status-pill" data-testid={`order-payment-${order.id}`}>{order.payment_status === 'refunded' ? (language === 'id' ? 'Dana dikembalikan' : 'Refunded') : (language === 'id' ? 'Lihat pembayaran' : 'View payment')}</Link>}</div>) : !loading && <div className="empty-order" data-testid="empty-orders">{text.noOrders}</div>}
     </section>
   </main></Shell>;
 }

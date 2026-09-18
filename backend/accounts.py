@@ -116,6 +116,11 @@ async def claim_guest_stories(request, user_id):
     if gid:
         await db.stories.update_many({'guest_id': gid, 'user_id': None},
                                     {'$set': {'user_id': user_id, 'ownership': 'parent'}})
+        legacy_free = await db.stories.find_one({'guest_id': gid, 'user_id': user_id, 'page_count': 8,
+            'billing': {'$exists': False}, 'status': {'$in': ['complete', 'completed', 'partial']}}, {'_id': 0, 'id': 1})
+        if legacy_free:
+            await db.users.update_one({'user_id': user_id, 'free_story_id': {'$exists': False}},
+                                      {'$set': {'free_story_id': legacy_free['id']}})
 
 
 async def issue_session(user, response, request):
@@ -187,6 +192,9 @@ async def guest_session(request: Request, response: Response):
 @router.post('/signup', response_model=AuthResult, status_code=201)
 async def signup(body: SignupInput, request: Request, response: Response):
     await rate_limit(request, 'signup', body.email, 10)
+    admin_emails = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()}
+    if body.email in admin_emails:
+        raise HTTPException(409, 'This administrator address is reserved. Use your setup link or sign in.')
     hashed = await asyncio.to_thread(bcrypt.hashpw, body.password.encode(), bcrypt.gensalt())
     user = {'user_id': 'user_' + secrets.token_hex(12), 'email': body.email, 'name': body.name,
             'hashed_password': hashed.decode(), 'role': 'parent', 'created_at': now().isoformat(), 'auth_version': 0}
