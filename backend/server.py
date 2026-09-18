@@ -26,13 +26,12 @@ from emergentintegrations.payments.stripe.checkout import (
 from PIL import Image, ImageDraw
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import JSONResponse
-from accounts import router as accounts_router, UserPublic, ensure_guest, guest_id, digest, claim_guest_stories
+from accounts import router as accounts_router, UserPublic, digest, claim_guest_stories
 import accounts
 from generation import generate as generate_with_progress, GOOGLE_VOICES, progress_of
 from story_access import authorized_story, public_story
 from story_models import StoryPublic, StoryProgress, OrderPublic
 from audio_routes import router as audio_router
-from pymongo.errors import DuplicateKeyError
 import secrets
 
 
@@ -664,10 +663,10 @@ async def root():
     return {"message": "IDStorybook API", "ai_enabled": bool(GEMINI_API_KEY or EMERGENT_LLM_KEY)}
 
 @api_router.post("/stories", response_model=StoryPublic, status_code=202)
-async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, request: Request, response: Response):
+async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, request: Request,
+                       user: dict = Depends(get_current_user)):
     if not (GEMINI_API_KEY or EMERGENT_LLM_KEY):
         raise HTTPException(503, "Story generation is not configured yet")
-    user = await get_optional_user(request)
     await accounts.rate_limit(request, 'story-create', limit=15)
     photo_b64 = _strip_data_url(input.photo_base64)
     if photo_b64:
@@ -684,18 +683,10 @@ async def create_story(input: StoryCreate, background_tasks: BackgroundTasks, re
         except Exception:
             raise HTTPException(422, 'Please use a valid JPG, PNG, or WebP photo under 10 MB.')
     story_id = str(uuid.uuid4())
-    gid = None
-    if not user:
-        gid = ensure_guest(request, response)
-        try:
-            await db.guest_sessions.insert_one({'guest_id': gid, 'story_id': story_id, 'created_at': datetime.now(timezone.utc)})
-        except DuplicateKeyError:
-            raise HTTPException(403, 'Your guest story is already started. Sign up to save it and create more.')
     story = {
         "id": story_id,
-        "user_id": user["user_id"] if user else None,
-        "guest_id": gid,
-        "ownership": 'parent' if user else 'guest',
+        "user_id": user["user_id"],
+        "ownership": 'parent',
         "generation_photo": photo_b64,
         "child_name": input.child_name,
         "age": input.age,
@@ -764,8 +755,11 @@ async def get_story_progress(story_id: str, request: Request):
 
 
 @api_router.post('/stories/{story_id}/retry', response_model=StoryProgress, status_code=202)
-async def retry_story(story_id: str, request: Request, tasks: BackgroundTasks):
+async def retry_story(story_id: str, request: Request, tasks: BackgroundTasks,
+                      user: dict = Depends(get_current_user)):
     story, _ = await authorized_story(story_id, request)
+    if story.get('user_id') != user['user_id']:
+        raise HTTPException(403, 'Save this story to your account before continuing generation.')
     await accounts.rate_limit(request, 'story-retry', limit=10)
     result = await db.stories.update_one({'id': story_id, 'status': {'$in': ['partial', 'failed']}},
                                          {'$set': {'status': 'generating', 'error': None}})

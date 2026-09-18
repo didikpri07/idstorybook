@@ -1,6 +1,8 @@
 # IDStorybook — Feature Expansion (Phase 2)
 
 ## Original problem statement
+**Current policy update (supersedes the original one-free-guest-story requirement):** Guests may fill the entire creation form, but must sign up or sign in before any story generation or generation retry. Details/photo should survive the authentication detour. Existing guest books remain claimable after authentication.
+
 Build on the existing IDStorybook codebase (React + Tailwind frontend, FastAPI backend, MongoDB) to add the four highest-impact features for user retention and experience.
 
 ### What Already Exists (No Changes)
@@ -66,7 +68,7 @@ Sentence estimates suffice; forced alignment out of scope. Only Google social lo
 
 ## Personas
 - Indonesian/English-speaking parents creating personalized stories, saving a family library and ordering books.
-- Guest parent making one trial story and claiming it on registration/login.
+- Guest parent preparing a personalized story form, then registering/logging in before generation.
 - Studio admin tracking print orders; original access-controlled admin preserved.
 
 ## Architecture decisions
@@ -74,7 +76,7 @@ Sentence estimates suffice; forced alignment out of scope. Only Google social lo
 - Protected environment values unchanged. One shared Motor connection (`database.py`).
 - `accounts.py`: JWT in secure HttpOnly SameSite=Lax cookie, optional bearer token for API, revocable JTI sessions, bcrypt passwords, password version rotation, legacy DB-session support.
 - Private story GET, progress, retry and order endpoints require owner or matching random guest cookie; no legacy owner inference. Public sharing is explicit, read-only, random capability link.
-- Guest quota enforced per browser cookie using unique MongoDB guest index. Cookie clearing/new browser cannot be prevented without stronger identity.
+- Current creation policy requires a valid parent account server-side. Legacy guest sessions/claiming remain supported for already-created stories; new guest generation and unauthenticated retries are blocked.
 - Guest stories auto-claimed atomically after successful signup/login; explicit claim endpoint is idempotent.
 - Authlib OIDC state/nonce via secure signed session. Google disabled until configured. Resend disabled truthfully until configured. Never simulate successful login/email delivery.
 - Reset token stored only as hash within user record with expiry; atomic one-time reset increments auth version and removes all sessions. Rate limits persisted by hashed identifiers.
@@ -138,3 +140,15 @@ Initial hypothesis: digital single book Rp49,000–79,000; longer books priced h
 3. Supply Midtrans server/client settings when Indonesian print checkout is needed (existing provider integration retained).
 4. Collect AI usage and printer/fulfilment quotes; validate proposed digital prices and test a three-book bundle. Current app print prices unchanged.
 5. Later: account deletion, email verification, voice previews, distributed background-job worker/leases, stronger cross-browser guest abuse controls.
+
+## Signup-before-generation change — 2026-09-18
+- User request: “Guest mode: unauthenticated users can fill the create story wizard (form), but prompted to sign up to create story and save it”.
+- Kept `/create` public and all form fields editable. Submission shows a bilingual signup/sign-in modal, with a keep-editing option, rather than starting generation.
+- Added tab-local session draft (`idsb_story_draft_v1`, two-hour expiry) preserving all settings and selected photo across signup/login/reload. Photos resized locally to at most1024px, matching existing backend sizing, to avoid storage overflow; no anonymous photo upload. Storage failures show an error without clearing the filled form.
+- After authentication parents return to the populated create form, review and press Make the magic. No generation happens merely by loading signup/login or returning to the form. Draft is removed only after a story is successfully accepted.
+- Backend POST stories and retry now require authenticated owners. New stories always use the authenticated user_id and parent ownership. Existing guest books remain readable by their existing guest session and can still be claimed after signup/login; retry only after claim.
+- Removed obsolete “One story as a guest” copy. Signup/login explains return to the story details; existing-account sign-in is supported. Personality values remain stable while switching EN/ID.
+- No integration credentials changed. Testing agent `/app/test_reports/iteration_3.json` verified actual signup/login, full form/photo retention, no pre-auth create requests, malformed/expired drafts, storage failure, and ownership guards. Browser202 success-path interception is test-only; application generation remains real.
+- Fixed preview instrumentation warning in VoicePicker by rendering each option as one text expression (no nested span). Verified rendered options contain no spans.
+- Closed final test gap with real backend logout while the create page still held the previous user: next submission returned401, opened signup/sign-in prompt, and retained name/settings/photo; actual re-login returned to the filled form without starting generation.
+- Modal appearance verified after animation: opaque white, readable text, existing brand styling. All core requested behaviors verified; final regression/build results recorded separately.

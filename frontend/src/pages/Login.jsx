@@ -22,6 +22,7 @@ export default function Login() {
   const [config, setConfig] = useState(null);
   const requested = params.get('next') || (location.state?.from ? location.state.from.pathname + (location.state.from.search || '') : '/dashboard');
   const next = requested.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : '/dashboard';
+  const returningToStory = next.startsWith('/create');
   useEffect(() => { axios.get(`${API}/auth/config`).then(r => setConfig(r.data)).catch(() => setConfig({})); }, []);
   useEffect(() => { setError(''); }, [signup]);
   if (user) return <Navigate to={next} replace />;
@@ -39,7 +40,7 @@ export default function Login() {
   return <Shell><main className="account-page"><section className="auth-card" data-testid="login-card">
     <div className="auth-brand" data-testid="auth-brand"><span className="auth-brand-mark"><BookOpen size={20} /></span>ID<b>Storybook</b></div>
     <h1 data-testid="auth-title">{signup ? (id ? 'Awal cerita indah.' : 'A new chapter begins.') : (id ? 'Selamat datang kembali.' : 'Welcome back.')}</h1>
-    <p data-testid="auth-description">{signup ? (id ? 'Simpan cerita si kecil di perpustakaan pribadimu.' : 'A little library for all their big adventures.') : (id ? 'Cerita favorit si kecil menunggumu.' : 'Their favourite stories are waiting for you.')}</p>
+    <p data-testid="auth-description">{returningToStory ? (id ? 'Daftar atau masuk untuk membuat dan menyimpan cerita si kecil. Setelah itu, kamu akan kembali ke detail ceritamu.' : 'Sign up or sign in to create and save their story. Then return to your story details.') : signup ? (id ? 'Simpan cerita si kecil di perpustakaan pribadimu.' : 'A little library for all their big adventures.') : (id ? 'Cerita favorit si kecil menunggumu.' : 'Their favourite stories are waiting for you.')}</p>
     {(error || params.get('error')) && <div className="error-message" role="alert" data-testid="auth-error">{error || (id ? 'Google belum dapat masuk. Coba lagi.' : 'Google sign-in could not be completed.')}</div>}
     <form className="account-form" onSubmit={submit}>
       {signup && <label htmlFor="parent-name">{id ? 'Nama orang tua' : 'Parent’s name'}<Input id="parent-name" name="name" autoComplete="name" required maxLength={80} value={form.name} onChange={update} data-testid="signup-name-input" /></label>}
@@ -53,7 +54,7 @@ export default function Login() {
     <Button variant="outline" className="btn-google" disabled={!config?.google_enabled || busy} onClick={() => { window.location.href = `${API}/auth/google?next=${encodeURIComponent(next)}`; }} data-testid="google-signin-button"><Mail size={17} />{id ? 'Lanjutkan dengan Google' : 'Continue with Google'}</Button>
     {config && !config.google_enabled && <small className="integration-note" data-testid="google-unavailable-note">{id ? 'Google belum tersedia. Gunakan email untuk saat ini.' : 'Google sign-in isn’t available yet. Please use email for now.'}</small>}
     <p className="auth-switch" data-testid="auth-switch">{signup ? (id ? 'Sudah punya akun? ' : 'Already have an account? ') : (id ? 'Baru di sini? ' : 'New here? ')}<Link to={`${signup ? '/login' : '/signup'}?next=${encodeURIComponent(next)}`} data-testid="auth-switch-link">{signup ? (id ? 'Masuk' : 'Sign in') : (id ? 'Buat akun' : 'Create an account')}</Link></p>
-    <Link to="/create" className="guest-continue" data-testid="continue-as-guest-link">{id ? 'Lanjutkan sebagai tamu' : 'Continue as a guest'}<ArrowRight size={14} /></Link>
+    <Link to="/create" className="guest-continue" data-testid="continue-as-guest-link">{returningToStory ? (id ? 'Kembali ke detail cerita' : 'Back to my story details') : (id ? 'Isi detail cerita terlebih dahulu' : 'Fill in story details first')}<ArrowRight size={14} /></Link>
     <small className="auth-privacy" data-testid="auth-privacy-note"><LockKeyhole size={12} />{id ? 'Perpustakaanmu, hanya untukmu.' : 'Your library. Just for you.'}</small>
   </section></main></Shell>;
 }

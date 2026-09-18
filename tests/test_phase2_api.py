@@ -62,7 +62,7 @@ def cleanup_test_data(mongo):
 
     test_prefixes = [
         'testphase2_', 'resetknown_', 'authflow_', 'privacy_', 'role_',
-        'ownera_', 'ownerb_', 'guestclaim_', 'resetflow_', 'progressisolation_'
+        'ownera_', 'ownerb_', 'guestclaim_', 'resetflow_', 'progressisolation_', 'voicevalidation_'
     ]
     email_regex = '^(' + '|'.join(test_prefixes) + ')' 
     users = list(mongo.users.find(
@@ -309,7 +309,7 @@ def test_guest_claim_and_no_second_guest_story(mongo):
             'visual_style': 'Classic Watercolor', 'story_language': 'en', 'page_count': 8, 'voice_id': 'nova'
         },
     )
-    assert denied_second_creation.status_code == 403
+    assert denied_second_creation.status_code == 401
 
     new_email, new_name, new_password = _new_identity('guestclaim')
     claimed = guest.post(
@@ -416,6 +416,8 @@ def test_progress_private_for_another_parent(api_client):
 
 # Module: voice validation guardrails
 def test_invalid_voice_rejected_with_validation_error(api_client):
+    email, name, password = _new_identity('voicevalidation')
+    _signup_and_get_user(api_client, email, password, name)
     invalid = api_client.post(
         f'{BASE_URL}/api/stories',
         json={

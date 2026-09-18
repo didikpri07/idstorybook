@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-18",
+  "change": "Guests may fill the form but must authenticate before generation and saving",
+  "prior_report": "/app/test_reports/iteration_3.json",
+  "resolved_findings": [
+    "VoicePicker option text now renders without invalid nested span elements; browser DOM verified",
+    "Final-submit401 scenario verified with real backend logout, not network interception",
+    "Re-login retains name, narrator choice, story idea and uploaded photo without starting generation",
+    "Durable QA account reference added to memory/test_credentials.md"
+  ],
+  "verified": [
+    "Public creation form and all guest fields remain available",
+    "Guest submit opens signup/sign-in prompt, not a generation request",
+    "Cancel/close retains form",
+    "Actual signup and existing-account login restore full settings/photo",
+    "Session draft persists through auth page reload, expires after2hours, malformed storage handled",
+    "Storage quota failure leaves form/photo intact and displays error",
+    "Anonymous create and retry return401",
+    "Authenticated creation assigns actual parent owner, ignoring client user_id",
+    "Legacy guest story ownership/claim compatibility preserved",
+    "EN/ID auth prompts and stable personality values",
+    "Real expired-session path opens auth prompt and retains values/photo"
+  ],
+  "application_mocked_apis": [],
+  "test_only_simulation": "The tester used browser response interception for one202/draft-clear assertion and isolated background-task doubles for ownership tests; production generation unchanged",
+  "final_regression_report": "/app/test_reports/pytest/pytest_results_guest_gate_final.xml"
+}

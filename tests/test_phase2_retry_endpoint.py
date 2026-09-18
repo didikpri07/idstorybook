@@ -119,8 +119,14 @@ def test_retry_returns_409_for_generating_or_complete_and_denies_other_parent(mo
     async def _run():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url='http://testserver') as client:
-            owner_headers = {'Authorization': f'Bearer {owner_token}'}
-            other_headers = {'Authorization': f'Bearer {other_token}'}
+            owner_headers = {
+                'Authorization': f'Bearer {owner_token}',
+                'X-Forwarded-For': f"192.0.2.{secrets.randbelow(200) + 1}",
+            }
+            other_headers = {
+                'Authorization': f'Bearer {other_token}',
+                'X-Forwarded-For': f"203.0.113.{secrets.randbelow(200) + 1}",
+            }
             generating_retry = await client.post(f'/api/stories/{generating_id}/retry', headers=owner_headers)
             complete_retry = await client.post(f'/api/stories/{complete_id}/retry', headers=owner_headers)
             other_parent_retry = await client.post(f'/api/stories/{partial_id}/retry', headers=other_headers)
@@ -148,7 +154,10 @@ def test_competing_retries_only_launch_background_once(mongo, monkeypatch, event
     async def _run():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url='http://testserver') as client:
-            headers = {'Authorization': f'Bearer {owner_token}'}
+            headers = {
+                'Authorization': f'Bearer {owner_token}',
+                'X-Forwarded-For': f"198.51.100.{secrets.randbelow(200) + 1}",
+            }
             r1, r2 = await asyncio.gather(
                 client.post(f'/api/stories/{story_id}/retry', headers=headers),
                 client.post(f'/api/stories/{story_id}/retry', headers=headers),
@@ -195,7 +204,10 @@ def test_progress_stage_page_percent_change_after_retry_checkpoints(mongo, monke
     async def _run():
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url='http://testserver') as client:
-            headers = {'Authorization': f'Bearer {owner_token}'}
+            headers = {
+                'Authorization': f'Bearer {owner_token}',
+                'X-Forwarded-For': f"198.18.{secrets.randbelow(200) + 1}.{secrets.randbelow(200) + 1}",
+            }
             first_progress = await client.get(f'/api/stories/{story_id}/progress', headers=headers)
             retry = await client.post(f'/api/stories/{story_id}/retry', headers=headers)
             snapshots = [first_progress.json(), retry.json()]
